@@ -138,7 +138,7 @@ Later: Docker image (secondary distribution), tkinter GUI, QGIS plugin, benchmar
 ## Status (update at the end of each milestone)
 
 Done: **1 scaffold**, **2 index** (CI green on ubuntu/macOS/windows × Python 3.11/3.12),
-**3 filter** (local tests green; check CI after the push).
+**3 filter** (CI green on all 6 jobs, 94 tests).
 Package version is `0.0.1` until the v0.1.0 tag (milestone 8). Repo is private until then.
 
 Decisions made so far:
