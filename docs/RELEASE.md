@@ -102,6 +102,8 @@ assets.
          photogrammetry software brands. In README.md, brands appear ONLY in the
          "Tested setup and compatibility" section (which must still be present, complete
          and marked `<!-- KEEP -->`) and in the dataset citation.
+   - [ ] Package metadata in `pyproject.toml` (description, keywords, classifiers) names no
+         camera, drone or photogrammetry software brands.
    - [ ] Version `0.1.0` in `pyproject.toml`; `uv lock`; the classifier is still
          "Pre-Alpha"/"Alpha" as appropriate.
    - [ ] The commit author email on all commits is the GitHub noreply address.

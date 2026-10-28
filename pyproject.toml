@@ -7,7 +7,19 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Sırrı Selim Kalaç" }]
 requires-python = ">=3.11"
-keywords = ["uav", "drone", "micasense", "multispectral", "kml", "pix4d", "gis"]
+keywords = [
+    "uav",
+    "drone",
+    "multispectral",
+    "photogrammetry",
+    "remote-sensing",
+    "kml",
+    "kmz",
+    "aoi",
+    "exif",
+    "geotiff",
+    "gis",
+]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Environment :: Console",

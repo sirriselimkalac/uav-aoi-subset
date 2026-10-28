@@ -324,6 +324,8 @@ pushed from there before the clone is deleted. Take to that session:
   cannot know the user's setup): say "multispectral camera", "photogrammetry software",
   "GIS". File-name patterns such as `IMG_0000_1.tif` are fine. Internal docs (this file,
   docs/VALIDATION.md, docs/RELEASE.md) may name the author's own tools.
+  Package metadata (pyproject.toml: description, keywords, classifiers) contains no brands
+  either.
   Exceptions that MUST stay, verbatim in meaning, and must never be deleted, shortened or
   "neutralised" by this rule or any later clean-up:
   1. README section **"Tested setup and compatibility"** (marked `<!-- KEEP -->`): the
