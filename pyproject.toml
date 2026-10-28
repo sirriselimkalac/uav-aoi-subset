@@ -18,7 +18,10 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: GIS",
 ]
-dependencies = []
+dependencies = [
+    "pyproj>=3.6",
+    "shapely>=2.0",
+]
 
 [project.urls]
 Repository = "https://github.com/sirriselimkalac/uav-aoi-subset"

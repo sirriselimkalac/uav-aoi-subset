@@ -96,3 +96,55 @@ def write_gps(path: Path, lat: float, lon: float, alt: float = 100.0) -> None:
         )
     finally:
         argfile.unlink()
+
+
+KML_NS = "http://www.opengis.net/kml/2.2"
+
+
+def ring_text(points: Iterable[tuple[float, float]], alt: float | None = 0.0) -> str:
+    """KML coordinates text; the first point is repeated at the end like Google Earth does."""
+    points = list(points)
+    points.append(points[0])
+    if alt is None:
+        return " ".join(f"{lon},{lat}" for lon, lat in points)
+    return " ".join(f"{lon},{lat},{alt}" for lon, lat in points)
+
+
+def polygon_kml(
+    shell: Iterable[tuple[float, float]], holes: Iterable[Iterable[tuple[float, float]]] = ()
+) -> str:
+    inner = "".join(
+        f"<innerBoundaryIs><LinearRing><coordinates>{ring_text(h)}</coordinates>"
+        "</LinearRing></innerBoundaryIs>"
+        for h in holes
+    )
+    return (
+        f"<Polygon><outerBoundaryIs><LinearRing><coordinates>{ring_text(shell)}"
+        f"</coordinates></LinearRing></outerBoundaryIs>{inner}</Polygon>"
+    )
+
+
+def kml_document(*geometries: str, namespace: str | None = KML_NS) -> str:
+    """A KML document with one Placemark per geometry snippet, inside a Folder."""
+    xmlns = f' xmlns="{namespace}"' if namespace else ""
+    placemarks = "".join(
+        f"<Placemark><name>Area {n}</name>{g}</Placemark>"
+        for n, g in enumerate(geometries, start=1)
+    )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        f"<kml{xmlns}><Document><Folder>{placemarks}</Folder></Document></kml>\n"
+    )
+
+
+def write_kmz(path: Path, kml: str, name: str = "doc.kml") -> Path:
+    import zipfile
+
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr(name, kml.encode("utf-8"))
+    return path
+
+
+def square(lon: float, lat: float, size: float) -> list[tuple[float, float]]:
+    """Counter-clockwise square with its south-west corner at (lon, lat)."""
+    return [(lon, lat), (lon + size, lat), (lon + size, lat + size), (lon, lat + size)]
