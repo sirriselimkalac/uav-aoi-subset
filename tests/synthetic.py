@@ -72,7 +72,7 @@ def write_gps(path: Path, lat: float, lon: float, alt: float = 100.0) -> None:
     """Write GPS tags with exiftool (tests using this need the requires_exiftool marker).
 
     Arguments go through a UTF-8 argfile because Windows mangles non-ASCII command-line
-    arguments.
+    arguments; for the same reason the argfile is passed by its (ASCII) name only.
     """
     args = [
         "-q",
@@ -89,6 +89,10 @@ def write_gps(path: Path, lat: float, lon: float, alt: float = 100.0) -> None:
     argfile = path.with_name(path.name + ".args")
     argfile.write_text("\n".join(args) + "\n", encoding="utf-8")
     try:
-        subprocess.run(["exiftool", "-charset", "filename=utf8", "-@", str(argfile)], check=True)
+        subprocess.run(
+            ["exiftool", "-charset", "filename=utf8", "-@", argfile.name],
+            check=True,
+            cwd=argfile.parent,
+        )
     finally:
         argfile.unlink()

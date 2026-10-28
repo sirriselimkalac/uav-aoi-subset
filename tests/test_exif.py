@@ -93,3 +93,18 @@ def test_unreadable_and_untagged_files(tmp_path):
     assert not fixes[untagged].has_position
     assert missing not in fixes
     assert broken not in fixes or not fixes[broken].has_position
+
+
+@pytest.mark.requires_exiftool
+def test_temp_folder_with_non_ascii_name(tmp_path, monkeypatch):
+    # Like a Windows temp folder under C:\Users\<Turkish user name>\AppData\Local\Temp.
+    temp = tmp_path / "Kullanıcı Şükrü" / "Temp"
+    temp.mkdir(parents=True)
+    monkeypatch.setattr(exif.tempfile, "tempdir", str(temp))
+    (path,) = write_capture(tmp_path / "Çekim", "IMG_0001", [1])
+    write_gps(path, 39.9, 32.8)
+
+    fixes = ExifToolReader().read_gps([path])
+
+    assert fixes[path].latitude == pytest.approx(39.9)
+    assert list(temp.iterdir()) == []  # argfile removed

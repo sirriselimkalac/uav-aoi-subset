@@ -152,7 +152,8 @@ class ExifToolReader:
     def _run(self, chunk: Sequence[Path]) -> list[dict]:
         # Absolute paths never start with "-", so exiftool cannot mistake one for an option.
         lines = "\n".join(str(Path(p).absolute()) for p in chunk) + "\n"
-        fd, argfile = tempfile.mkstemp(prefix="uav-aoi-subset-", suffix=".args")
+        fd, name = tempfile.mkstemp(prefix="uav-aoi-subset-", suffix=".args")
+        argfile = Path(name)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(lines)
@@ -165,11 +166,14 @@ class ExifToolReader:
                 "filename=utf8",
                 *self.TAGS,
                 "-@",
-                argfile,
+                # Only the ASCII file name goes on the command line: Windows converts
+                # arguments to the ANSI code page, which would break a temp folder path
+                # containing e.g. a Turkish user name.
+                argfile.name,
             ]
-            proc = subprocess.run(cmd, capture_output=True, check=False)
+            proc = subprocess.run(cmd, capture_output=True, check=False, cwd=argfile.parent)
         finally:
-            Path(argfile).unlink(missing_ok=True)
+            argfile.unlink(missing_ok=True)
 
         # exiftool exits with 1 when some files could not be read but still prints the rest.
         stderr = proc.stderr.decode("utf-8", errors="replace").strip()
