@@ -11,6 +11,8 @@ from pathlib import Path
 from uav_aoi_subset import __version__
 from uav_aoi_subset.core.aoi import AOIError, load_aoi
 from uav_aoi_subset.core.copy import (
+    FLAT,
+    LAYOUTS,
     MODES,
     CopyError,
     CopyPlan,
@@ -111,7 +113,8 @@ def build_parser() -> argparse.ArgumentParser:
         "copy",
         help="Copy the band files of a subset CSV into one flat output folder.",
         description="Copy (or hard-link, or move) the band files of the captures in "
-        "SUBSET_CSV. Folders are flattened (A/B/C -> A_B_C). Every run writes to a new "
+        "SUBSET_CSV into one folder; each file is named after its folder chain "
+        "(A/B/C/IMG_0000_1.tif -> A_B_C_IMG_0000_1.tif). Every run writes to a new "
         "<ROOT name>_subset_NN folder next to ROOT unless --dest is given. Files already at "
         "the destination with the same size are skipped, so an interrupted run can be "
         "resumed with --dest <its folder>; files with a different size are never overwritten "
@@ -136,6 +139,13 @@ def build_parser() -> argparse.ArgumentParser:
         default="copy",
         help="copy (default); hardlink (same drive only, uses no extra space); move (removes "
         "the files from ROOT, needs --confirm-move).",
+    )
+    p_copy.add_argument(
+        "--layout",
+        choices=LAYOUTS,
+        default=FLAT,
+        help="flat (default): all files in the output folder, named A_B_C_IMG_0000_1.tif; "
+        "folders: one folder per source folder, A_B_C/IMG_0000_1.tif.",
     )
     p_copy.add_argument(
         "--confirm-move", action="store_true", help="Confirm that --mode move may remove files."
@@ -446,6 +456,7 @@ def _run_copy(args: argparse.Namespace) -> int:
             records,
             dest,
             mode=args.mode,
+            layout=args.layout,
             bands=args.bands,
             pattern=args.pattern,
             exclude=args.exclude,
@@ -464,6 +475,7 @@ def _run_copy(args: argparse.Namespace) -> int:
     print(f"Output folder:      {plan.dest}")
     if args.dest is None and not args.dry_run:
         print("  (new folder; if this run is interrupted, resume it with --dest and this path)")
+    print(f"Layout:             {args.layout}")
     print(
         f"Mode:               {plan.mode}"
         + ("  (dry run, nothing is written)" if args.dry_run else "")

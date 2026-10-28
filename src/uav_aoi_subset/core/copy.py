@@ -1,14 +1,18 @@
-"""Copy, hard-link or move the band files of a subset into one flat output folder.
+"""Copy, hard-link or move the band files of a subset into one output folder.
 
 Work happens in two steps. :func:`plan_copy` finds every band file, decides its destination
 and what to do with it without writing anything (this is also the ``--dry-run`` result).
 :func:`execute_copy` then carries the plan out. Both leave their outcome in the task list, so
 a dry run and a real run produce the same report.
 
-Relative folders are flattened (``A/B/C`` -> ``A_B_C``) so Pix4Dmapper gets one level of
-folders. Files are written under a temporary name and renamed when complete, so an
-interrupted run never leaves a truncated file under the final name; a later run skips the
-files that are already there with the same size and never overwrites others unless asked.
+Relative folders are flattened. With the default ``flat`` layout every file lands directly in
+the output folder, named after its folder chain (``A/B/C/IMG_0000_1.tif`` ->
+``A_B_C_IMG_0000_1.tif``); the ``folders`` layout keeps one folder per source folder instead
+(``A_B_C/IMG_0000_1.tif``).
+
+Files are written under a temporary name and renamed when complete, so an interrupted run
+never leaves a truncated file under the final name; a later run skips the files that are
+already there with the same size and never overwrites others unless asked.
 """
 
 from __future__ import annotations
@@ -43,6 +47,10 @@ from uav_aoi_subset.core.index import (
 from uav_aoi_subset.core.progress import ProgressCallback, no_progress
 
 MODES = ("copy", "hardlink", "move")
+
+# Output layouts: one folder with folder-chain file names, or one flat folder per source folder.
+FLAT, FOLDERS = "flat", "folders"
+LAYOUTS = (FLAT, FOLDERS)
 
 # Suffix of files that are still being written; never counted as finished.
 PARTIAL_SUFFIX = ".uas-partial"
@@ -347,23 +355,33 @@ def _check_dest(root: Path, dest: Path) -> list[str]:
 
 
 class _DestListing:
-    """Band files already in the output folders, by (BASE, band); listed once per folder."""
+    """Band files already in the output folders; listed once per folder.
+
+    Keyed by (folder-chain prefix, BASE, band). The prefix is ``""`` for the ``folders`` layout
+    and the flat folder name for ``flat`` names such as ``A_B_IMG_0000_1.tif``.
+    """
 
     def __init__(self, regex: re.Pattern[str]) -> None:
         self.regex = regex
-        self.cache: dict[Path, dict[tuple[str, int], str]] = {}
+        self.cache: dict[Path, dict[tuple[str, str, int], str]] = {}
 
-    def get(self, folder: Path) -> dict[tuple[str, int], str]:
+    def get(self, folder: Path) -> dict[tuple[str, str, int], str]:
         if folder not in self.cache:
-            found: dict[tuple[str, int], str] = {}
+            found: dict[tuple[str, str, int], str] = {}
             try:
                 names = [p.name for p in _fs(folder).iterdir()]
             except OSError:
                 names = []
             for name in names:
-                m = self.regex.match(name)
-                if m:
-                    found[(m.group("base").upper(), int(m.group("band")))] = name
+                text = _nfc(name)
+                # The band file name starts at the beginning or right after an underscore.
+                starts = [0] + [i + 1 for i, ch in enumerate(text) if ch == "_"]
+                for start in starts:
+                    m = self.regex.match(text[start:])
+                    if m:
+                        prefix = text[: start - 1].casefold() if start else ""
+                        found[(prefix, m.group("base").upper(), int(m.group("band")))] = name
+                        break
             self.cache[folder] = found
         return self.cache[folder]
 
@@ -409,6 +427,7 @@ def plan_copy(
     dest: Path,
     *,
     mode: str = "copy",
+    layout: str = FLAT,
     bands: int = DEFAULT_BANDS,
     pattern: str = DEFAULT_PATTERN,
     exclude: Iterable[str] = (),
@@ -427,6 +446,8 @@ def plan_copy(
     """
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}")
+    if layout not in LAYOUTS:
+        raise ValueError(f"layout must be one of {LAYOUTS}")
     if bands < 1:
         raise ValueError("bands must be at least 1")
     root, dest = Path(root), Path(dest).resolve()
@@ -473,23 +494,27 @@ def plan_copy(
         if parts is None:  # MATLAB CSV row, nothing on disk to tell the folder
             tasks.append(FileTask(kind, name, NOT_FOUND))
             continue
-        folder = dest / flat[parts] if flat[parts] else dest
+        if layout == FLAT:
+            folder, prefix = dest, flat[parts]
+        else:
+            folder, prefix = (dest / flat[parts] if flat[parts] else dest), ""
         files = capture.band_files if capture else {}
         ext = next(iter(files.values())).suffix if files else ".tif"
         at_dest = listing.get(folder)
+        key = (prefix.casefold(), base.upper())
         band_tasks = []
         for band in sorted(set(range(1, bands + 1)) | set(files)):
             if band in files:
                 source = files[band]
-                target = folder / source.name
+                target = folder / _prefixed(prefix, source.name)
                 band_tasks.append(
                     _file_task(kind, name, band, source, target, mode, overwrite, dest_device)
                 )
-            elif (base.upper(), band) in at_dest:
-                target = folder / at_dest[(base.upper(), band)]
+            elif (*key, band) in at_dest:
+                target = folder / at_dest[(*key, band)]
                 band_tasks.append(FileTask(kind, name, ALREADY, band, destination=target))
             else:
-                target = folder / f"{base}_{band}{ext}"
+                target = folder / _prefixed(prefix, f"{base}_{band}{ext}")
                 band_tasks.append(FileTask(kind, name, MISSING_BAND, band, destination=target))
         if all(t.status == MISSING_BAND for t in band_tasks):
             tasks.append(FileTask(kind, name, NOT_FOUND))
@@ -498,6 +523,7 @@ def plan_copy(
     progress("plan", len(wanted), len(wanted))
 
     tasks.extend(_include_tasks(root, dest, include, tasks, mode, overwrite, dest_device, warnings))
+    _check_unique_destinations(tasks)
 
     if mode == "hardlink":
         other = [t for t in tasks if t.status in PENDING and not t.same_device]
@@ -529,6 +555,25 @@ def plan_copy(
         warnings=warnings,
         subset_name=subset_name,
     )
+
+
+def _prefixed(prefix: str, file_name: str) -> str:
+    return f"{prefix}_{file_name}" if prefix else file_name
+
+
+def _check_unique_destinations(tasks: list[FileTask]) -> None:
+    """Two files must never get the same name (compared as macOS and Windows do)."""
+    seen: dict[str, Path] = {}
+    for t in tasks:
+        if t.destination is None or t.source is None:
+            continue
+        key = _nfc(os.fspath(t.destination)).casefold()
+        if key in seen and seen[key] != t.source:
+            raise CopyError(
+                f"{seen[key]} and {t.source} would both be written to {t.destination}; "
+                "rename one of them or use --layout folders"
+            )
+        seen[key] = t.source
 
 
 def _include_tasks(

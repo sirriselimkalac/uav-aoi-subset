@@ -174,11 +174,11 @@ aoi copy $Data $North.FullName --dry-run
 | ID | Check | Expected |
 |---|---|---|
 | V30 | `--dry-run` | summary shows `Output folder: ...\blueberry_subset_01`; `Test-Path $Dest` is `False`; no report written |
-| V31 | `Measure-Command { aoi copy $Data $North.FullName --include '**/*.csv' \| Out-Default }` | files copied = V21 × 7 (+ the reflectance CSV); output in `$Dest`, folders flat; report CSV next to `$Dest`; write down the time |
-| V32 | `uv run python scripts\compare_outputs.py tree $Dest "$Res\matlab_copy_north"` | only differences are our extra report/include files, if any |
+| V31 | `Measure-Command { aoi copy $Data $North.FullName --include '**/*.csv' \| Out-Default }` | files copied = V21 × 7 (+ the reflectance CSV); all files directly in `$Dest`, named `<folder chain>_IMG_####_<band>.tif`; report CSV next to `$Dest`; write down the time |
+| V32 | MATLAB keeps one folder per source folder, so compare with that layout: `aoi copy $Data $North.FullName --layout folders --dest "$Res\ours_copy_folders"`, then `uv run python scripts\compare_outputs.py tree "$Res\ours_copy_folders" "$Res\matlab_copy_north"` | only differences are our extra report/include files, if any |
 | V33 | Resume: `aoi copy $Data $North.FullName --include '**/*.csv' --dest $Dest` | everything skipped, exit code 0 (`$LASTEXITCODE`), takes seconds |
 | V33a | New run without `--dest`: `aoi copy $Data $North.FullName --dry-run` | output folder is `blueberry_subset_02`; `$Dest` untouched. `Get-Content "$Dest\.uav-aoi-subset-output"` names the subset CSV |
-| V34 | Interrupt: `aoi copy $Data "$Res\ours_index.csv" --dest "$Res\full_copy"`, press Ctrl+C after a few seconds, then run it again | no `*.uas-partial` files left (`Get-ChildItem "$Res\full_copy" -Recurse -Filter *.uas-partial`); the second run completes; 3,360 files in total |
+| V34 | Interrupt: `aoi copy $Data "$Res\ours_index.csv" --dest "$Res\full_copy" --layout folders` (folders layout because V35 and V39 reuse this tree), press Ctrl+C after a few seconds, then run it again | no `*.uas-partial` files left (`Get-ChildItem "$Res\full_copy" -Recurse -Filter *.uas-partial`); the second run completes; 3,360 files in total |
 | V35 | Conflict: `Set-Content "$Res\full_copy\<some folder>\IMG_0001_3.tif" "x"`, run again | exit code 1, the file is listed under *Conflicts* and left as it is; with `--overwrite` it is replaced |
 | V36 | Report: open the newest `*_copy_report_*.csv` in Excel | one row per file; statuses are plausible |
 | V37 | Hard links (same NTFS drive): `aoi copy $Data $North.FullName --mode hardlink --dest "$Demo\data\linked_north"` | "Space needed: 0 bytes"; `fsutil hardlink list "<a linked file>"` shows two paths |
@@ -186,7 +186,7 @@ aoi copy $Data $North.FullName --dry-run
 | V39 | Move on a **disposable copy** (never the original): copy `$Res\full_copy` to `$Demo\data\move_src`, delete `.uav-aoi-subset-output` in it, `aoi index $Demo\data\move_src --out "$Res\move_index.csv"`, then `aoi copy $Demo\data\move_src "$Res\move_index.csv" --dest "$Demo\data\move_dst" --mode move --confirm-move`; run it a second time | first run: all moved, no TIFFs left in `move_src`; second run: all "already at the destination", nothing reported missing |
 | V40 | Destination inside the root: `aoi copy $Data $North.FullName --dest "$Data\_subset_test"`, then `aoi index $Data --out "$Res\after.csv"` | warning on copy; the index still shows 480 captures. Then delete `$Data\_subset_test`. |
 | V41 | Long path: `aoi copy $Data $North.FullName --dest "$Res\$('a'*120)\$('b'*120)"` | warning about long paths; files exist. Note whether Explorer and Pix4Dmapper can open them. |
-| V42 | Extra captures (if the dataset has panel captures): `--extra-captures <panel record names>` or a text file with one name per line | panel captures copied into their own flat folder |
+| V42 | Extra captures (if the dataset has panel captures): `--extra-captures <panel record names>` or a text file with one name per line | panel files copied next to the others, named `<panel folder chain>_IMG_####_<band>.tif` |
 | V43 | Other drive (USB stick or D:, optional): `--dest` on that drive with `--mode copy` | works |
 | V44 | Same, with `--mode hardlink` | refused **before** anything is written ("hard links only work on one drive") |
 | V45 | exFAT/FAT32 stick (optional): put a small subset folder on the stick as ROOT, index it, then `--mode hardlink` with a `--dest` on the stick | stops with the "may not support hard links … use --mode copy" message; no fallback to copying |
@@ -196,7 +196,7 @@ aoi copy $Data $North.FullName --dry-run
 
 | ID | Check | Expected |
 |---|---|---|
-| V50 | New project → *Add Directories…* → `$Dest` | all images load; camera rig recognised (Altum-PT); image count noted |
+| V50 | New project → *Add Images…* → all files in `$Dest` (flat layout, renamed files) | all images load; camera rig recognised (Altum-PT) and the 7 bands of each capture grouped together (renamed files keep the `_<band>` suffix); image count noted. **If the bands are not grouped correctly**, repeat with `--layout folders` (V32 output, *Add Directories…*) and write down which layout works |
 | V51 | Map view | camera positions lie inside the AOI |
 | V52 | Optional: run step 1 (Initial Processing) | completes; calibration panel detected if included (V42) |
 
@@ -275,7 +275,7 @@ ExifTool: `_____`  LongPathsEnabled: `_`  Dataset folder layout: `______________
 | V44 | | |
 | V45 | | |
 | V46 | | |
-| V50 | | image count |
+| V50 | | image count; flat layout OK in Pix4D? |
 | V51 | | |
 | V52 | | |
 | V60 | | |

@@ -272,8 +272,8 @@ def test_copy_end_to_end(copy_inputs, tmp_path, capsys):
     ]
     assert main(args) == 0
     dest = tmp_path / "Kampanya_subset_01"
-    assert (dest / "Saha_Fotoğrafları_Part2_0000SET_000" / "IMG_0000_7.tif").is_file()
-    assert (dest / "Kalibrasyon" / "IMG_0000_1.tif").is_file()
+    assert (dest / "Saha_Fotoğrafları_Part2_0000SET_000_IMG_0000_7.tif").is_file()
+    assert (dest / "Kalibrasyon_IMG_0000_1.tif").is_file()
     assert (dest / "panel_reflectance.csv").is_file()
     out = capsys.readouterr().out
     assert "Subset records:     1 (+ 1 extra)" in out
@@ -322,7 +322,7 @@ def test_copy_conflict_exit_code(copy_inputs, tmp_path, capsys):
     root, subset = copy_inputs
     dest = tmp_path / "out"
     assert main(["copy", str(root), str(subset), "--dest", str(dest)]) == 0
-    (dest / "Saha_Fotoğrafları_Part2_0000SET_000" / "IMG_0000_2.tif").write_bytes(b"x")
+    (dest / "Saha_Fotoğrafları_Part2_0000SET_000_IMG_0000_2.tif").write_bytes(b"x")
     assert main(["copy", str(root), str(subset), "--dest", str(dest)]) == 1
     assert "conflicts:        1" in capsys.readouterr().out
     assert main(["copy", str(root), str(subset), "--dest", str(dest), "--overwrite"]) == 0
@@ -354,3 +354,11 @@ def test_copy_not_enough_space(copy_inputs, tmp_path, monkeypatch, capsys):
     assert main(["copy", str(root), str(subset), "--dest", str(tmp_path / "out")]) == 1
     assert "not enough free space" in capsys.readouterr().err
     assert not (tmp_path / "out").exists()
+
+
+def test_copy_folders_layout(copy_inputs, tmp_path, capsys):
+    root, subset = copy_inputs
+    dest = tmp_path / "out"
+    assert main(["copy", str(root), str(subset), "--dest", str(dest), "--layout", "folders"]) == 0
+    assert (dest / "Saha_Fotoğrafları_Part2_0000SET_000" / "IMG_0000_1.tif").is_file()
+    assert "Layout:             folders" in capsys.readouterr().out

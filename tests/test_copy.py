@@ -156,10 +156,10 @@ def test_copy_flattens_folders(tree, tmp_path):
     assert s.statuses["copied"] == 7 * n_captures
     assert s.bytes_transferred == s.bytes_total > 0
     files = files_under(dest)
-    assert f"{FIELD_FLAT}/IMG_0000_1.tif" in files
+    assert f"{FIELD_FLAT}_IMG_0000_1.tif" in files
     # IMG_0000 exists in three SET folders and is kept apart.
-    assert "Saha_Fotoğrafları_Part1_0001SET_000/IMG_0000_7.tif" in files
-    assert "Saha_Fotoğrafları_Part2_0000SET_000/IMG_0000_7.tif" in files
+    assert "Saha_Fotoğrafları_Part1_0001SET_000_IMG_0000_7.tif" in files
+    assert "Saha_Fotoğrafları_Part2_0000SET_000_IMG_0000_7.tif" in files
     assert OUTPUT_MARKER in files
     assert not any(f.endswith(".dat") for f in files)
     assert len(files) == 7 * n_captures + 1
@@ -167,15 +167,55 @@ def test_copy_flattens_folders(tree, tmp_path):
     assert discover_captures(dest) == []
 
 
-def test_flat_folder_collision_on_disk(tmp_path):
+@pytest.mark.parametrize(
+    ("layout", "first", "second"),
+    [
+        ("flat", "A_B_000_IMG_0001_1.tif", "A_B_000_v02_IMG_0001_1.tif"),
+        ("folders", "A_B_000/IMG_0001_1.tif", "A_B_000_v02/IMG_0001_1.tif"),
+    ],
+)
+def test_flat_folder_collision_on_disk(tmp_path, layout, first, second):
     root = tmp_path / "root"
     write_capture(root / "A B" / "000", "IMG_0001", range(1, 8))
     write_capture(root / "A_B" / "000", "IMG_0001", range(1, 8))
     dest = tmp_path / "out"
-    run(root, records_for(root), dest)
+    run(root, records_for(root), dest, layout=layout)
     files = files_under(dest)
-    assert "A_B_000/IMG_0001_1.tif" in files
-    assert "A_B_000_v02/IMG_0001_1.tif" in files
+    assert first in files and second in files
+    # Resuming finds both captures again.
+    assert statuses(run(root, records_for(root), dest, layout=layout)) == {"skipped-existing": 14}
+
+
+def test_folders_layout_keeps_one_folder_per_source_folder(tree, tmp_path):
+    dest = tmp_path / "out"
+    plan = run(tree, records_for(tree), dest, layout="folders")
+    files = files_under(dest)
+    assert f"{FIELD_FLAT}/IMG_0000_1.tif" in files
+    assert "Saha_Fotoğrafları_Part2_0000SET_000/IMG_0000_7.tif" in files
+    assert len(files) == statuses(plan)["copied"] + 1
+
+
+def test_root_level_captures_keep_their_name(tmp_path):
+    root = tmp_path / "root"
+    write_capture(root, "IMG_0001", range(1, 8))
+    run(root, records_for(root), tmp_path / "out")
+    assert "IMG_0001_1.tif" in files_under(tmp_path / "out")
+
+
+def test_case_insensitive_name_clash_is_refused(tmp_path):
+    root = tmp_path / "root"
+    write_capture(root / "a", "IMG_0001", range(1, 8))
+    write_capture(root / "b", "IMG_0001", range(1, 8))
+    records = records_for(root)
+    plan = plan_copy(root, records, tmp_path / "out")
+    plan.tasks[7].destination = plan.tasks[0].destination.with_name("A_IMG_0001_1.TIF")
+    with pytest.raises(CopyError, match="both be written"):
+        copy_mod._check_unique_destinations(plan.tasks)
+
+
+def test_layout_validation(tree, tmp_path):
+    with pytest.raises(ValueError, match="layout"):
+        plan_copy(tree, [], tmp_path / "out", layout="nested")
 
 
 def test_missing_bands_copy_what_exists(tmp_path):
@@ -208,7 +248,7 @@ def test_matlab_csv_rows_match_by_record_name(tree, tmp_path):
     assert s.captures == 1
     assert s.ambiguous == ["A_B_IMG_0001"]
     assert s.not_found == ["C_IMG_9999"]
-    assert "C/IMG_0002_7.tif" in files_under(tmp_path / "out")
+    assert "C_IMG_0002_7.tif" in files_under(tmp_path / "out")
 
 
 def test_matlab_csv_from_file(tree, tmp_path):
@@ -221,7 +261,7 @@ def test_matlab_csv_from_file(tree, tmp_path):
 
     plan = run(tree, read_index_csv(csv_path), tmp_path / "out")
     assert statuses(plan)["copied"] == 7
-    assert f"{FIELD_FLAT}/IMG_0001_3.tif" in files_under(tmp_path / "out")
+    assert f"{FIELD_FLAT}_IMG_0001_3.tif" in files_under(tmp_path / "out")
 
 
 def test_record_not_on_disk(tree, tmp_path):
@@ -275,14 +315,13 @@ def test_resume_skips_same_size_files(tree, tmp_path):
 
 def test_partial_file_is_not_counted_as_done(tree, tmp_path):
     dest = tmp_path / "out"
-    folder = dest / FIELD_FLAT
-    folder.mkdir(parents=True)
+    dest.mkdir()
     (dest / OUTPUT_MARKER).write_text("x")
-    (folder / ("IMG_0000_1.tif" + PARTIAL_SUFFIX)).write_bytes(b"half")
+    (dest / (f"{FIELD_FLAT}_IMG_0000_1.tif" + PARTIAL_SUFFIX)).write_bytes(b"half")
     plan = run(tree, records_for(tree, folders_like="0000SET/000"), dest)
     assert statuses(plan)["copied"] == 7 * 4
     assert not list(dest.rglob("*" + PARTIAL_SUFFIX))
-    assert (folder / "IMG_0000_1.tif").stat().st_size == (
+    assert (dest / f"{FIELD_FLAT}_IMG_0000_1.tif").stat().st_size == (
         tree / FIELD / "IMG_0000_1.tif"
     ).stat().st_size
 
@@ -291,7 +330,7 @@ def test_conflict_is_never_overwritten_silently(tree, tmp_path):
     dest = tmp_path / "out"
     records = records_for(tree, folders_like="Part2")
     run(tree, records, dest)
-    target = dest / "Saha_Fotoğrafları_Part2_0000SET_000" / "IMG_0000_3.tif"
+    target = dest / "Saha_Fotoğrafları_Part2_0000SET_000_IMG_0000_3.tif"
     target.write_bytes(b"different")
 
     plan = run(tree, records, dest)
@@ -339,7 +378,7 @@ def test_hardlink(tree, tmp_path):
     assert statuses(plan)["linked"] == 7
     assert plan.bytes_needed == 0
     source = tree / "Saha Fotoğrafları/Part2/0000SET/000/IMG_0000_1.tif"
-    target = dest / "Saha_Fotoğrafları_Part2_0000SET_000" / "IMG_0000_1.tif"
+    target = dest / "Saha_Fotoğrafları_Part2_0000SET_000_IMG_0000_1.tif"
     assert target.samefile(source)
     assert source.stat().st_nlink == 2
     plan = run(tree, records_for(tree, folders_like="Part2"), dest, mode="hardlink")
@@ -384,7 +423,7 @@ def test_move_same_drive(tree, tmp_path):
     assert statuses(plan)["moved"] == 7
     assert plan.bytes_needed == 0
     assert not source.exists()
-    assert (dest / "Saha_Fotoğrafları_Part2_0000SET_000" / source.name).read_bytes() == data
+    assert (dest / f"Saha_Fotoğrafları_Part2_0000SET_000_{source.name}").read_bytes() == data
 
     # Running again finds the files at the destination instead of reporting them as lost.
     plan = run(tree, records, dest, mode="move")
@@ -392,16 +431,18 @@ def test_move_same_drive(tree, tmp_path):
     assert plan.summary().not_found == []
 
 
-def test_move_resume_after_partial_move(tree, tmp_path):
+@pytest.mark.parametrize("layout", ["flat", "folders"])
+def test_move_resume_after_partial_move(tree, tmp_path, layout):
     records = records_for(tree, folders_like="Part2")
     dest = tmp_path / "out"
     folder = tree / "Saha Fotoğrafları/Part2/0000SET/000"
-    target = dest / "Saha_Fotoğrafları_Part2_0000SET_000"
+    flat_name = "Saha_Fotoğrafları_Part2_0000SET_000"
+    target, prefix = (dest, flat_name + "_") if layout == "flat" else (dest / flat_name, "")
     target.mkdir(parents=True)
     (dest / OUTPUT_MARKER).write_text("x")
     for band in (1, 2):
-        (folder / f"IMG_0000_{band}.tif").replace(target / f"IMG_0000_{band}.tif")
-    plan = run(tree, records, dest, mode="move")
+        (folder / f"IMG_0000_{band}.tif").replace(target / f"{prefix}IMG_0000_{band}.tif")
+    plan = run(tree, records, dest, mode="move", layout=layout)
     assert statuses(plan) == {"already-at-destination": 2, "moved": 5}
     assert plan.summary().incomplete == []
     assert len(list(target.glob("*.tif"))) == 7
@@ -474,7 +515,7 @@ def test_long_destination_paths(tree, tmp_path):
     plan = run(tree, records_for(tree, folders_like="Part2"), dest)
     assert statuses(plan)["copied"] == 7
     assert any("characters long" in w for w in plan.warnings)
-    target = dest / "Saha_Fotoğrafları_Part2_0000SET_000" / "IMG_0000_7.tif"
+    target = dest / "Saha_Fotoğrafları_Part2_0000SET_000_IMG_0000_7.tif"
     assert len(str(target)) > 260
     assert Path(long_path(target)).is_file()
 
@@ -540,7 +581,7 @@ def test_extra_captures(tree, tmp_path):
     assert s.captures == 4  # 1 subset + 3 distinct panel captures
     assert s.statuses["copied"] == 28
     assert {t.kind for t in plan.tasks} == {"capture", "extra"}
-    assert "Kalibrasyon_Fotograflari/IMG_0002_1.tif" in files_under(dest)
+    assert "Kalibrasyon_Fotograflari_IMG_0002_1.tif" in files_under(dest)
 
 
 def test_exclude_applies_to_subset_lookup(tree, tmp_path):
