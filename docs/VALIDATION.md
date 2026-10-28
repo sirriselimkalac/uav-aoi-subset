@@ -12,7 +12,7 @@ The validation runs in five phases, in this order:
 |---|---|---|---|
 | 1 | Install like an ordinary user, **README only** | none | snag log, numbers |
 | 2 | Every command on the public blueberry dataset (V1–V69) | blueberry | numbers, example KMLs, screenshots |
-| 3 | Same data, unusual KMLs (V70–V73) | blueberry | numbers |
+| 3 | Same data: unusual KMLs (V70–V72) and the layered copy (V74–V79) | blueberry | numbers, example KMLs, screenshots |
 | 4 | Real campaign data (V80–V87) | private | **anonymous numbers only** |
 | 5 | Real data with ROOT one level too high (V90–V93) | private | **anonymous numbers only** |
 
@@ -39,7 +39,13 @@ screenshots of real data.** Replace paths with placeholders (`D:\<campaign>\...`
 
 Dataset for Phases 2–3: EagleNXT *"Altum-PT data of a blueberry field"*. It has 480 captures ×
 7 bands = 3,360 TIFFs plus one calibration-panel reflectance CSV. It is public, but it is
-**never** committed or redistributed; the README only links to it.
+**never** committed or redistributed; the README only links to it. The dataset page states no
+licence.
+
+As published it is **one folder** (`altum-pt-blueberries-60m-sample-data`): 3,361 files, no
+sub-folders, ZIP 20,822,285,409 bytes (19.3 GB), extracted 27,278,926,830 bytes (25.4 GB). So
+Phase 2 cannot exercise folder handling (set folders, repeated image names, flattening); Phase 3
+does that with a layered copy made by `examples/make_layered_dataset.py`.
 
 ---
 
@@ -77,7 +83,10 @@ Only now continue with Phase 2.
 
 ## Phase 2: blueberry dataset
 
-These are the original checks V1–V69. Their IDs are unchanged.
+These are the original checks V1–V69. Their IDs are unchanged. The data is one folder, so
+every capture lies in ROOT itself: there is one footprint polygon, `copy` does not rename files,
+and `--layout folders` gives the same result as the flat layout. Those parts are checked on the
+layered copy in Phase 3.
 
 ### 2.0 Before you start
 
@@ -103,7 +112,8 @@ Folders and console encoding (run these at the start of every PowerShell session
 ```powershell
 $Demo = "C:\uav-demo"                      # short ASCII path, no user name in screenshots
 $Repo = "$Demo\uav-aoi-subset"
-$Data = "$Demo\data\blueberry"             # the extracted dataset: the folder that holds its image folders
+$Data = "$Demo\data\blueberry"             # the extracted dataset: the folder that holds the TIFFs
+$Lay  = "$Demo\data\blueberry_layered"     # Phase 3: layered copy (same drive, so hard links work)
 $Aoi  = "$Demo\aoi"                        # KMLs drawn in Google Earth (blueberry only)
 $Res  = "$Demo\results"                    # every output of the checks
 New-Item -ItemType Directory -Force $Demo, "$Demo\data", $Aoi, $Res | Out-Null
@@ -125,12 +135,17 @@ git config user.email "260359645+sirriselimkalac@users.noreply.github.com"
 git log -1 --format="%h %an <%ae>"
 ```
 
-Download the dataset (note the size of the ZIP file for the results table; the README says
-"about 19 GB"), extract it to `$Data`, then:
+Download the dataset from the link in the README (ZIP: 20,822,285,409 bytes; the README says
+"about 19 GB") and extract it. The ZIP holds one folder, `altum-pt-blueberries-60m-sample-data`.
+Move that folder to `$Data` (replace the first path with where you extracted it):
 
 ```powershell
-(Get-ChildItem $Data -Recurse -Include *.tif,*.tiff -File).Count     # expect 3360
-Get-ChildItem $Data -Recurse -Directory | Select-Object FullName      # note the folder layout
+Move-Item "<extract folder>\altum-pt-blueberries-60m-sample-data" $Data
+(Get-ChildItem $Data -File).Count                                     # expect 3361
+(Get-ChildItem $Data -Recurse -Include *.tif,*.tiff -File).Count      # expect 3360
+(Get-ChildItem $Data -Recurse -Directory).Count                       # expect 0
+(Get-ChildItem $Data -File | Measure-Object Length -Sum).Sum          # expect 27278926830
+Get-ChildItem $Data -Exclude *.tif | Select-Object Name               # the calibration CSV
 ```
 
 ### 2.2 Unit tests on this machine
@@ -154,7 +169,7 @@ Measure-Command { aoi index $Data --out "$Res\ours_index.csv" | Out-Default }
 | V11 | Open `ours_index.csv` in Excel (double-click) | Note whether the columns split correctly. With a Turkish locale Excel may expect `;`. Turkish characters must display correctly. |
 | V12 | Turkish path: `Copy-Item -Recurse $Data "$Demo\data\Saha Fotoğrafları – deneme"`, then `aoi index "$Demo\data\Saha Fotoğrafları – deneme" --out "$Res\tr_index.csv"` | same numbers as V10 |
 | V13 | ExifTool not on PATH: `aoi index $Data --out "$Res\x.csv" --exiftool "<full path to exiftool.exe>"` with a PATH without ExifTool (`$env:Path = ($env:Path -split ';' \| ? { $_ -notmatch 'exiftool' }) -join ';'`) | works with `--exiftool`; without it, a clear "ExifTool was not found on PATH" error that lists only the **Windows** install steps (installer, or rename `exiftool(-k).exe`), exit code 1, no traceback. Open a new window afterwards. |
-| V14 | If the dataset contains calibration-panel captures in their own folder: `aoi index $Data --exclude "<panel folder>" --out "$Res\nopanel.csv"` | panel captures left out |
+| V14 | If the dataset contains calibration-panel captures in their own folder: `aoi index $Data --exclude "<panel folder>" --out "$Res\nopanel.csv"` | panel captures left out. **Blueberry: n.a.** (no panel captures, only the reflectance CSV) |
 
 ### 2.4 footprint
 
@@ -174,7 +189,7 @@ Keep the merged-area KML you made earlier with Pix4D **outside the clone** (for 
 | V20a | `--hull concave` | area smaller than or equal to V20; the outline follows the flight lines (no large empty corners). If it cuts into the field, try `--ratio 0.5` and note which ratio fits best. |
 | V20b | `--buffer 20` | outline about 20 m outside V20 everywhere (Google Earth ruler) |
 | V20c | Open V20, V20b and the Pix4D merged-area KML together | visual comparison: the Pix4D area (the imaged ground) should lie around the V20 outline; note roughly which buffer (V20b or another value) matches the Pix4D area best |
-| V20d | `--per-folder` | one coloured polygon per image folder; the polygon list in the summary adds up to 480 captures. Re-run with `--per-folder 2` (or the depth of the flight folders, see the folder layout noted in 2.1) for one polygon per flight. |
+| V20d | `--per-folder` | one polygon, named `(root)`, with 480 captures: every capture lies in ROOT itself. `--per-folder 2` gives the same. (Several polygons, one per set folder, are checked on the layered copy in V76a.) |
 | V20e | `aoi filter "$Res\ours_index.csv" --aoi "$Aoi\blueberry_footprint.kml" --out "$Res\fp_subset.csv"` | 480 captures inside (the footprint as an AOI keeps every capture) |
 | V20f | Run the first command again | refused: the KML exists, add `--overwrite` |
 | V20g | `aoi footprint "$Res\matlab_index.csv" --out "$Res\matlab_footprint.kml"` (after 2.7) | same polygon as V20 when both are opened in Google Earth |
@@ -247,19 +262,19 @@ aoi copy $Data $North.FullName --dry-run
 | ID | Check | Expected |
 |---|---|---|
 | V30 | `--dry-run` | summary shows `Output folder: ...\blueberry_subset_01`; `Test-Path $Dest` is `False`; no report written |
-| V31 | `Measure-Command { aoi copy $Data $North.FullName --include '**/*.csv' \| Out-Default }` | files copied = V21 × 7 (+ the reflectance CSV); all files directly in `$Dest`, named `<folder chain>_IMG_####_<band>.tif`; report CSV next to `$Dest`; write down the time |
-| V32 | MATLAB keeps one folder per source folder, so compare with that layout: `aoi copy $Data $North.FullName --layout folders --dest "$Res\ours_copy_folders"`, then `uv run python scripts\compare_outputs.py tree "$Res\ours_copy_folders" "$Res\matlab_copy_north"` | only differences are our extra report/include files, if any |
+| V31 | `Measure-Command { aoi copy $Data $North.FullName --include '**/*.csv' \| Out-Default }` | files copied = V21 × 7 (+ the reflectance CSV); all files directly in `$Dest`, named `IMG_####_<band>.tif` as in the dataset (the captures lie in ROOT itself, so there is no folder chain to add; renaming is checked in V77b); report CSV next to `$Dest`; write down the time |
+| V32 | MATLAB keeps one folder per source folder, so compare with that layout: `aoi copy $Data $North.FullName --layout folders --dest "$Res\ours_copy_folders"`, then `uv run python scripts\compare_outputs.py tree "$Res\ours_copy_folders" "$Res\matlab_copy_north"` | only differences are our extra report/include files, if any. On this one-folder data both tools put the files directly in the output folder; folders appear in V77c |
 | V33 | Resume: `aoi copy $Data $North.FullName --include '**/*.csv' --dest $Dest` | everything skipped, exit code 0 (`$LASTEXITCODE`), takes seconds |
 | V33a | New run without `--dest`: `aoi copy $Data $North.FullName --dry-run` | output folder is `blueberry_subset_02`; `$Dest` untouched. `Get-Content "$Dest\.uav-aoi-subset-output"` names the subset CSV |
 | V34 | Interrupt: `aoi copy $Data "$Res\ours_index.csv" --dest "$Res\full_copy" --layout folders` (folders layout because V35 and V39 reuse this tree), press Ctrl+C after a few seconds, then run it again | "Interrupted." and a resume hint naming `--dest`, `$LASTEXITCODE` = 130, no traceback; a `full_copy_copy_report_*.csv` of the files done so far; no `*.uas-partial` files left (`Get-ChildItem "$Res\full_copy" -Recurse -Filter *.uas-partial`); the second run completes; 3,360 files in total |
-| V35 | Conflict: `Set-Content "$Res\full_copy\<some folder>\IMG_0001_3.tif" "x"`, run again | exit code 1, the file is listed under *Conflicts* and left as it is; with `--overwrite` it is replaced |
+| V35 | Conflict: `Set-Content "$Res\full_copy\IMG_0001_3.tif" "x"`, run again | exit code 1, the file is listed under *Conflicts* and left as it is; with `--overwrite` it is replaced |
 | V36 | Report: open the newest `*_copy_report_*.csv` in Excel | one row per file; statuses are plausible |
 | V37 | Hard links (same NTFS drive): `aoi copy $Data $North.FullName --mode hardlink --dest "$Demo\data\linked_north"` | "Space needed: 0 bytes"; `fsutil hardlink list "<a linked file>"` shows two paths |
 | V38 | Move refused: `aoi copy $Data $North.FullName --mode move` | refused, asks for `--confirm-move`; nothing moved |
 | V39 | Move on a **disposable copy** (never the original): copy `$Res\full_copy` to `$Demo\data\move_src`, delete `.uav-aoi-subset-output` in it, `aoi index $Demo\data\move_src --out "$Res\move_index.csv"`, then `aoi copy $Demo\data\move_src "$Res\move_index.csv" --dest "$Demo\data\move_dst" --mode move --confirm-move`; run it a second time | first run: all moved, no TIFFs left in `move_src`; second run: all "already at the destination", nothing reported missing |
 | V40 | Destination inside the root: `aoi copy $Data $North.FullName --dest "$Data\_subset_test"`, then `aoi index $Data --out "$Res\after.csv"` | warning on copy; the index still shows 480 captures. Then delete `$Data\_subset_test`. |
 | V41 | Long path: `aoi copy $Data $North.FullName --dest "$Res\$('a'*120)\$('b'*120)"` | warning about long paths; files exist. Note whether Explorer and Pix4Dmapper can open them. |
-| V42 | Extra captures (if the dataset has panel captures): `--extra-captures <panel record names>` or a text file with one name per line | panel files copied next to the others, named `<panel folder chain>_IMG_####_<band>.tif` |
+| V42 | Extra captures (if the dataset has panel captures): `--extra-captures <panel record names>` or a text file with one name per line | panel files copied next to the others, named `<panel folder chain>_IMG_####_<band>.tif`. **Blueberry: n.a.** (no panel captures) |
 | V43 | Other drive (USB stick or D:, optional): `--dest` on that drive with `--mode copy` | works |
 | V44 | Same, with `--mode hardlink` | refused **before** anything is written ("hard links only work on one drive") |
 | V45 | exFAT/FAT32 stick (optional): put a small subset folder on the stick as ROOT, index it, then `--mode hardlink` with a `--dest` on the stick | stops with the "may not support hard links … use --mode copy" message; no fallback to copying |
@@ -269,7 +284,7 @@ aoi copy $Data $North.FullName --dry-run
 
 | ID | Check | Expected |
 |---|---|---|
-| V50 | New project → *Add Images…* → all files in `$Dest` (flat layout, renamed files) | all images load; camera rig recognised (Altum-PT) and the 7 bands of each capture grouped together (renamed files keep the `_<band>` suffix); image count noted. **If the bands are not grouped correctly**, repeat with `--layout folders` (V32 output, *Add Directories…*) and write down which layout works |
+| V50 | New project → *Add Images…* → all files in `$Dest` (flat layout; here the names are unchanged) | all images load; camera rig recognised (Altum-PT) and the 7 bands of each capture grouped together; image count noted. Whether **renamed** files (`<folder chain>_IMG_####_<band>.tif`) are grouped is checked in V77e |
 | V51 | Map view | camera positions lie inside the AOI |
 | V52 | Optional: run step 1 (Initial Processing) | completes; calibration panel detected if included (V42) |
 
@@ -294,7 +309,9 @@ except in V69.
 
 ---
 
-## Phase 3: same data, different KMLs
+## Phase 3: same data, different KMLs and a layered copy
+
+### 3A. Unusual KMLs
 
 Blueberry data, `$Res\ours_index.csv` from V10. Keep these KMLs in `$Aoi`; they are not public
 examples.
@@ -304,7 +321,79 @@ examples.
 | V70 | **KML exported from QGIS.** In QGIS, load `$Aoi\blueberry_aoi_north.kml` (or draw the same area as a polygon layer), then *Export → Save Features As… → KML* to `$Aoi\north_qgis.kml`. `aoi filter "$Res\ours_index.csv" --aoi "$Aoi\north_qgis.kml" --out "$Res\north_qgis.csv"` | read without AOI warnings (QGIS writes `MultiGeometry`, `ExtendedData` and a schema; all fine); same captures inside as V21 when it is the same polygon (`compare_outputs.py csv` against the V21 subset reports no differences) |
 | V71 | **Area drawn as a line.** In Google Earth, draw the outline of the field with *Add Path* (not *Add Polygon*), save as `$Aoi\north_line.kml`, then `aoi filter "$Res\ours_index.csv" --aoi "$Aoi\north_line.kml" --out "$Res\line.csv"` | exit code 1, `error: …: no usable Polygon found. Draw the area with … 'Add Polygon' tool; paths (LineStrings) and placemarks (Points) are not areas.` plus the next step; `Test-Path "$Res\line.csv"` is `False`; no traceback |
 | V72 | **Polygon away from the flight.** Draw a polygon a few km away, save as `$Aoi\elsewhere.kml`; `aoi filter "$Res\ours_index.csv" --aoi "$Aoi\elsewhere.kml" --out "$Res\elsewhere.csv"`; then `aoi copy $Data "$Res\elsewhere.csv" --dry-run` | filter: exit 0, `inside the AOI:   0`, the warning "no capture lies inside the AOI …", a CSV with only the header row. copy: 0 files to copy, nothing written (`Test-Path` of the shown output folder is `False`) |
-| V73 | **Polygon across the border of two flights.** If the dataset has more than one flight folder (see V20d with `--per-folder 2`), draw one polygon that covers the border between two flights, save as `$Aoi\border.kml`, filter it, then `aoi copy $Data <its CSV> --dry-run` | captures from both flight folders in the subset (Excel: filter the `RelativeFolder` column; counts per flight noted); no "extra copies"; copy plans one flat folder with unique names. If blueberry is a single flight, mark n.a. and run it in Phase 4 (V86) |
+| V73 | **Polygon across the border of two flights.** Blueberry is one folder: replaced by V77 on the layered copy (`cross_two` crosses the border between two set folders). Mark n.a. here; the real-data version is V86 | n.a. |
+
+### 3B. Layered copy (`examples/make_layered_dataset.py`)
+
+The one-folder data cannot show set folders, repeated image names or forgotten subset folders.
+`examples/make_layered_dataset.py` makes a copy with that structure. **Follow the README
+(*Example dataset → Optional: a layered copy of the example data*), not this file, for the
+commands**, and note in V74 whatever was unclear: this also tests the README. The commands
+below are only for checking.
+
+Hard links keep the extra space near zero (`$Lay` is on the same drive as `$Data`). The tool
+never writes into its inputs, so the shared files are safe here; do not use `$Lay` for the move
+checks.
+
+```powershell
+cd $Repo
+uv run python examples\make_layered_dataset.py build $Data $Lay --mode hardlink
+aoi index $Lay --out "$Res\lay_index.csv"
+aoi footprint "$Res\lay_index.csv" --out "$Res\lay_footprint_sets.kml" --per-folder 1
+```
+
+| ID | Check | Expected |
+|---|---|---|
+| V74 | **Build, following the README.** Note anything in the README that was unclear or missing | summary: 480 captures (0 incomplete), four lines `0000SET` … `0003SET` with 120 captures each (`IMG_0000 to IMG_0119`, `IMG_0120 to IMG_0239`, …), other files: 1, space needed `0 bytes`; then progress lines and `Mapping: …\blueberry_layered_mapping.csv`. In Explorer: `0000SET\000` … `0003SET\000`, each with `IMG_0000_1.tif` … `IMG_0119_7.tif` (840 files), the calibration CSV in `0000SET\000`. `$Data` unchanged: 3,361 files, no new ones (an index CSV written into `$Data` earlier is listed as "Not copied") |
+| V74a | Run the same `build` command again | `error: …blueberry_layered is not empty` with the next step; exit code 1; nothing written |
+| V74b | Ctrl+C: `uv run python examples\make_layered_dataset.py build $Data "$Demo\data\lay_ctrl_c"` (copy mode), press Ctrl+C after a few seconds; then `Remove-Item -Recurse "$Demo\data\lay_ctrl_c"` | "Interrupted." and "delete … and run again", `$LASTEXITCODE` = 130, no traceback, no `*.partial` file left, no mapping CSV |
+| V75 | **Flight lines and numbering.** In Google Earth Pro, *File → Import* `$Res\ours_index.csv` (flat index from V10) as points; look at the labels/order (Excel: sort by `ImageBase`) | note the direction of the flight lines (e.g. N–S) and whether consecutive numbers follow one line, then the next (back and forth). Then the four groups of 120 are strips parallel to the lines |
+| V76 | Layered `index` | 480 captures, all complete, 480 with GPS, **extra copies: 0** (each `IMG_0000` … `IMG_0119` exists in four set folders but they are different captures), no *Folders not scanned*. `RecordName` values are unique (`0000SET_000_IMG_0000` …) |
+| V76a | `footprint --per-folder 1`, open in Google Earth | four coloured strips, 120 captures each, side by side and parallel to the flight lines (V75); together they cover the V20 polygon |
+
+Draw two AOIs **across** the flight lines (as in 2.5, in a new folder under *Temporary Places*;
+they become public examples):
+
+- `$Aoi\blueberry_aoi_cross_all.kml`: a band across the field that crosses all four strips;
+- `$Aoi\blueberry_aoi_cross_two.kml`: a shorter band that crosses only the border between two
+  neighbouring strips.
+
+```powershell
+foreach ($a in "cross_all", "cross_two") {
+  aoi filter "$Res\ours_index.csv" --aoi "$Aoi\blueberry_aoi_$a.kml" --out "$Res\${a}_flat.csv"
+  aoi filter "$Res\lay_index.csv"  --aoi "$Aoi\blueberry_aoi_$a.kml" --out "$Res\${a}_lay.csv"
+}
+$Map = "$Demo\data\blueberry_layered_mapping.csv"
+```
+
+| ID | Check | Expected |
+|---|---|---|
+| V77 | Both AOIs drawn and saved | `cross_all` crosses the four strips of V76a, `cross_two` exactly two |
+| V77a | The four `filter` runs | flat and layered counts equal for each AOI; in Excel, `RelativeFolder` of `cross_all_lay.csv` has all four set folders, `cross_two_lay.csv` two; counts per set folder noted |
+| V77b | `aoi copy $Lay "$Res\cross_all_lay.csv" --include '**/*.csv'` (default flat layout; output `$Demo\data\blueberry_layered_subset_01`) | no error about two files with the same name; files = captures × 7 + 1 CSV; names like `0000SET_000_IMG_0000_1.tif` and `0001SET_000_IMG_0000_1.tif` side by side; report next to the folder |
+| V77c | `aoi copy $Lay "$Res\cross_all_lay.csv" --layout folders --dest "$Res\lay_copy_folders"` | one folder per set folder (`0000SET_000`, `0001SET_000`, …), original file names inside; same file count as V77b |
+| V77d | `uv run python examples\make_layered_dataset.py verify $Map "$Res\cross_all_flat.csv" "$Res\cross_all_lay.csv"`, then the same for `cross_two` | `RESULT: SAME`, exit code 0, capture counts as in V77a, no copies listed |
+| V77e | **Pix4Dmapper with renamed files** (the open question of V50): new project → *Add Images…* → all TIFFs in the V77b folder | all images load; the 7 bands of each capture are grouped (renamed files keep the `_<band>` suffix); image count = V77b ÷ 7 captures. **If the bands are not grouped correctly**, repeat with the V77c output (*Add Directories…*) and write down which layout works |
+| V77f | Wrong pairing: `verify $Map "$Res\cross_two_flat.csv" "$Res\cross_all_lay.csv"` | `RESULT: DIFFERENT`, exit code 1, the extra captures listed under *Only in the layered subset* |
+
+Forgotten subset folder:
+
+```powershell
+$Dup = "$Demo\data\blueberry_layered_dup"
+uv run python examples\make_layered_dataset.py build $Data $Dup --mode hardlink --add-duplicate
+aoi index $Dup --out "$Res\dup_index.csv"
+aoi filter "$Res\dup_index.csv" --aoi "$Aoi\blueberry_aoi_cross_all.kml" --out "$Res\cross_all_dup.csv"
+aoi filter "$Res\dup_index.csv" --aoi "$Aoi\blueberry_aoi_cross_all.kml" --skip-duplicates --out "$Res\cross_all_dup_skip.csv"
+```
+
+| ID | Check | Expected |
+|---|---|---|
+| V78 | `build --add-duplicate` | summary adds `Duplicate: group 2 again in old_subset/ (840 files)`; `old_subset\0001SET_000` holds 840 files |
+| V78a | `index` of `$Dup` | 600 captures; **extra copies: 120**, each listed with `0001SET/000` and `old_subset/0001SET_000`; the `IMG_0000` of the other set folders are **not** listed (same name, different capture); the run does not stop |
+| V78b | The two `filter` runs | without `--skip-duplicates`: the copies inside the AOI are listed, count = V77a + the copies of `0001SET`; with it: same count as `cross_all_lay.csv` (V77a), dropped copies listed |
+| V78c | `aoi copy $Dup "$Res\cross_all_dup.csv" --skip-duplicates --dry-run` | same capture and file count as V77b; the `old_subset` copies shown as skipped duplicates |
+| V78d | `verify "$Demo\data\blueberry_layered_dup_mapping.csv" "$Res\cross_all_flat.csv" "$Res\cross_all_dup.csv"`, then with `cross_all_dup_skip.csv` | first: `RESULT: SAME` plus *Captures found more than once in the layered subset* with the number of copies and the `--skip-duplicates` hint; second: `RESULT: SAME` with no copies listed |
+| V79 | Optional, **MATLAB on the layered copy**: as in 2.7, run `BUILD_PROJECT_IMAGE_INDEX.m` on `$Lay`, `EXPORT_CSV_WITHIN_KML_AREA.m` with `blueberry_aoi_cross_all.kml`, `COPY_GEOTIFFS_FROM_CSV.m`; move every output out of `$Lay` to `$Res\matlab_lay_*` right away. Then `compare_outputs.py csv "$Res\lay_index.csv" "$Res\matlab_lay_index.csv"`, `compare_outputs.py tree "$Res\lay_copy_folders" "$Res\matlab_lay_copy"` and `verify $Map "$Res\cross_all_flat.csv" "$Res\matlab_lay_cross_all.csv"` | `RESULT: SAME` in all three (MATLAB record names match through the mapping); note anything MATLAB does differently with the repeated image names |
 
 ---
 
@@ -373,7 +462,7 @@ Users will often point ROOT at a folder above the campaign. Same privacy rules a
 
    ```powershell
    cd $Demo
-   Remove-Item -Recurse -Force $Repo, $Res, $Priv, "$Demo\phase1", "$Demo\data\blueberry_subset_*", "$Demo\data\linked_north", "$Demo\data\move_src", "$Demo\data\move_dst", "$Demo\data\Saha Fotoğrafları – deneme" -ErrorAction SilentlyContinue
+   Remove-Item -Recurse -Force $Repo, $Res, $Priv, "$Demo\phase1", "$Demo\data\blueberry_subset_*", "$Demo\data\blueberry_layered*", "$Demo\data\lay_ctrl_c", "$Demo\data\linked_north", "$Demo\data\move_src", "$Demo\data\move_dst", "$Demo\data\Saha Fotoğrafları – deneme" -ErrorAction SilentlyContinue
    cmdkey /list | Select-String github           # stored GitHub credentials
    cmdkey /delete:git:https://github.com         # remove them (repeat for each one listed)
    uv cache clean
@@ -388,8 +477,8 @@ Users will often point ROOT at a folder above the campaign. Same privacy rules a
 ## Results
 
 Commit tested: `_______`  Date: `__________`  Windows version: `______`  Python: `____`
-ExifTool: `_____`  LongPathsEnabled: `_`  Dataset ZIP size: `_____`
-Dataset folder layout: `________________________`
+ExifTool: `_____`  LongPathsEnabled: `_`  Dataset ZIP size: `20,822,285,409 bytes`
+Dataset folder layout: `one folder, 3,361 files (3,360 TIFFs + 1 CSV), no sub-folders`
 
 Numbers only. Phase 4 and 5 rows never contain coordinates, campaign or field names, paths or
 screenshots.
@@ -422,12 +511,12 @@ Snag log (copy from your notes; one row per snag):
 | V11 | | Excel column split? | |
 | V12 | | | |
 | V13 | | | |
-| V14 | | | |
+| V14 | n.a. | no panel captures in the dataset | |
 | V20 | | area (ha) | |
 | V20a | | area (ha), ratio used | |
 | V20b | | | |
 | V20c | | buffer that matches Pix4D best | |
-| V20d | | polygons (full folder / per flight) | |
+| V20d | | one `(root)` polygon, 480 captures? | |
 | V20e | | captures inside | |
 | V20f | | | |
 | V20g | | | |
@@ -451,12 +540,12 @@ Snag log (copy from your notes; one row per snag):
 | V39 | | | |
 | V40 | | | |
 | V41 | | Explorer / Pix4D can open? | |
-| V42 | | | |
+| V42 | n.a. | no panel captures in the dataset | |
 | V43 | | | |
 | V44 | | | |
 | V45 | | | |
 | V46 | | | |
-| V50 | | image count; flat layout OK in Pix4D? | |
+| V50 | | image count (names unchanged here; renamed files: V77e) | |
 | V51 | | | |
 | V52 | | | |
 | V60 | | sharp on high DPI? in front? | |
@@ -470,14 +559,33 @@ Snag log (copy from your notes; one row per snag):
 | V68 | | | |
 | V69 | | | |
 
-### Phase 3: same data, different KMLs
+### Phase 3: same data, different KMLs and a layered copy
 
 | ID | Result (pass / fail / n.a.) | Numbers / notes | Issue # |
 |---|---|---|---|
 | V70 | | captures inside (vs. V21) | |
 | V71 | |  | |
 | V72 | |  | |
-| V73 | | captures per flight folder | |
+| V73 | n.a. | replaced by V77 (one-folder dataset) | |
+| V74 | | build time; README unclear points | |
+| V74a | |  | |
+| V74b | |  | |
+| V75 | | flight-line direction; numbering back and forth? | |
+| V76 | | captures / extra copies / time | |
+| V76a | | strips (polygons, captures each) | |
+| V77 | |  | |
+| V77a | | cross_all: flat / layered / per set; cross_two: flat / layered / per set | |
+| V77b | | files / time | |
+| V77c | |  | |
+| V77d | | cross_all / cross_two result | |
+| V77e | | images loaded; bands grouped with renamed files? which layout works? | |
+| V77f | |  | |
+| V78 | |  | |
+| V78a | | captures / extra copies | |
+| V78b | | count without / with --skip-duplicates | |
+| V78c | |  | |
+| V78d | |  | |
+| V79 | | optional; differences, if any | |
 
 ### Phase 4: real campaign data (anonymous numbers only)
 
