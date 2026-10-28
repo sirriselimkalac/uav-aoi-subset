@@ -108,3 +108,19 @@ def test_temp_folder_with_non_ascii_name(tmp_path, monkeypatch):
 
     assert fixes[path].latitude == pytest.approx(39.9)
     assert list(temp.iterdir()) == []  # argfile removed
+
+
+@pytest.mark.parametrize(
+    ("platform", "expected", "absent"),
+    [
+        ("win32", "exiftool(-k).exe", "brew"),
+        ("darwin", "brew install exiftool", "apt"),
+        ("linux", "apt install libimage-exiftool-perl", "brew"),
+        ("freebsd14", "exiftool.org/install.html", "brew"),
+    ],
+)
+def test_install_hint_per_os(platform, expected, absent):
+    hint = exif.install_hint(platform)
+    assert expected in hint
+    assert absent not in hint
+    assert "--exiftool" in hint

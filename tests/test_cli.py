@@ -114,7 +114,7 @@ def test_index_end_to_end(tmp_path, capsys):
 def test_index_no_matches(tmp_path, capsys):
     (tmp_path / "notes.txt").write_text("x")
     assert main(["index", str(tmp_path)]) == 1
-    assert "No band files" in capsys.readouterr().err
+    assert "no band files" in capsys.readouterr().err
 
 
 def _record(name: str, lon: float | None, lat: float | None, complete: bool = True):
@@ -201,7 +201,7 @@ def test_filter_missing_files(filter_inputs, tmp_path, capsys):
     assert main(["filter", str(tmp_path / "nope.csv"), "--aoi", str(aoi)]) == 1
     assert main(["filter", str(index_csv), "--aoi", str(tmp_path / "nope.kml")]) == 1
     err = capsys.readouterr().err
-    assert "not a file" in err and "cannot read" in err
+    assert err.count("error: not a file") == 2
 
 
 def test_filter_refuses_to_overwrite_input(filter_inputs, capsys):
@@ -486,3 +486,118 @@ def test_footprint_too_few_positions(tmp_path, capsys):
     assert main(["footprint", str(path)]) == 1
     assert "at least 3" in capsys.readouterr().err
     assert not path.with_suffix(".kml").exists()
+
+
+# --- errors, interruption, --debug, --version ----------------------------------------
+
+
+def test_version_shows_python_and_exiftool(monkeypatch, capsys):
+    from uav_aoi_subset import cli
+
+    monkeypatch.setattr(cli, "find_exiftool", lambda: "/opt/bin/exiftool")
+    monkeypatch.setattr(cli, "exiftool_version", lambda path: "13.10")
+    with pytest.raises(SystemExit) as exc:
+        main(["--version"])
+    assert exc.value.code == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == f"uav-aoi-subset {__version__}"
+    assert lines[1].startswith("Python 3.")
+    assert lines[2] == "ExifTool 13.10 at /opt/bin/exiftool"
+
+
+def test_version_without_exiftool(monkeypatch, capsys):
+    from uav_aoi_subset.core import exif
+
+    monkeypatch.setattr(exif.shutil, "which", lambda name: None)
+    with pytest.raises(SystemExit):
+        main(["--version"])
+    assert "ExifTool: not found on PATH" in capsys.readouterr().out
+
+
+def test_help_documents_exit_codes(capsys):
+    with pytest.raises(SystemExit):
+        main(["--help"])
+    out = capsys.readouterr().out
+    for code in ("0 ", "1 ", "2 ", "130"):
+        assert f"  {code}" in out
+
+
+def test_ctrl_c_exits_130_without_traceback(tmp_path, monkeypatch, capsys):
+    from uav_aoi_subset import cli
+
+    def interrupted(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "ExifToolReader", lambda path: None)
+    monkeypatch.setattr(cli, "build_index", interrupted)
+    assert main(["index", str(tmp_path)]) == 130
+    err = capsys.readouterr().err
+    assert "Interrupted." in err
+    assert "Traceback" not in err
+
+
+def test_ctrl_c_during_copy_tells_how_to_resume(copy_inputs, tmp_path, monkeypatch, capsys):
+    from uav_aoi_subset import cli
+
+    def interrupted(plan, progress):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "execute_copy", interrupted)
+    root, subset = copy_inputs
+    assert main(["copy", str(root), str(subset)]) == 130
+    err = capsys.readouterr().err
+    dest = tmp_path / "Kampanya_subset_01"
+    assert f'--dest "{dest}"' in err
+    assert "Interrupted." in err
+    assert list(tmp_path.glob("Kampanya_subset_01_copy_report_*.csv"))
+
+
+def test_permission_error_on_output(filter_inputs, monkeypatch, capsys):
+    from uav_aoi_subset import cli
+
+    def locked(records, path):
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.setattr(cli, "write_index_csv", locked)
+    index_csv, aoi = filter_inputs
+    assert main(["filter", str(index_csv), "--aoi", str(aoi)]) == 1
+    err = capsys.readouterr().err
+    assert "permission denied" in err
+    assert "--out" in err
+    assert "Traceback" not in err
+
+
+@pytest.mark.parametrize("debug", [False, True])
+def test_unexpected_error(filter_inputs, monkeypatch, capsys, debug):
+    from uav_aoi_subset import cli
+
+    def broken(records, area):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(cli, "filter_records", broken)
+    index_csv, aoi = filter_inputs
+    args = ["filter", str(index_csv), "--aoi", str(aoi)] + (["--debug"] if debug else [])
+    assert main(args) == 1
+    err = capsys.readouterr().err
+    assert "error: unexpected RuntimeError: boom" in err
+    assert ("Traceback" in err) is debug
+    assert ("Re-run with --debug" in err) is not debug
+    assert "issues" in err
+
+
+def test_every_error_says_what_to_do_next(tmp_path, capsys):
+    (tmp_path / "x.csv").write_text("a,b\n1,2\n")
+    cases = [
+        ["index", str(tmp_path / "missing")],
+        ["index", str(tmp_path), "--bands", "0"],
+        ["index", str(tmp_path), "--pattern", "("],
+        ["filter", str(tmp_path / "x.csv"), "--aoi", str(tmp_path / "x.csv")],
+        ["footprint", str(tmp_path / "x.csv")],
+        ["footprint", str(tmp_path / "x.csv"), "--ratio", "0.5"],
+    ]
+    for argv in cases:
+        assert main(argv) == 1, argv
+        err = capsys.readouterr().err
+        lines = err.splitlines()
+        assert lines[0].startswith("error: "), argv
+        assert len(lines) >= 2 and lines[1].startswith("  "), argv

@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -19,12 +20,37 @@ from typing import Protocol
 
 from uav_aoi_subset.core.progress import ProgressCallback, no_progress
 
-INSTALL_HINT = (
-    "Install ExifTool and make sure it is on your PATH, or pass its location with --exiftool:\n"
-    "  macOS:          brew install exiftool\n"
-    "  Windows:        installer from https://exiftool.org/ (or: choco install exiftool)\n"
-    "  Debian/Ubuntu:  sudo apt install libimage-exiftool-perl"
-)
+_INSTALL_STEPS = {
+    "win32": (
+        "  - run the Windows installer from https://exiftool.org/\n"
+        "    (or: choco install exiftool), or\n"
+        "  - unzip the Windows package from https://exiftool.org/, rename 'exiftool(-k).exe' to\n"
+        "    'exiftool.exe' and put its folder on PATH.\n"
+        "  Then open a new terminal window and check with: exiftool -ver"
+    ),
+    "darwin": (
+        "  - with Homebrew: brew install exiftool, or\n"
+        "  - the macOS package from https://exiftool.org/.\n"
+        "  Then check with: exiftool -ver"
+    ),
+    "linux": (
+        "  - Debian/Ubuntu: sudo apt install libimage-exiftool-perl\n"
+        "  - Fedora/RHEL:   sudo dnf install perl-Image-ExifTool\n"
+        "  - or your distribution's ExifTool package. Then check with: exiftool -ver"
+    ),
+}
+
+
+def install_hint(platform: str | None = None) -> str:
+    """How to install ExifTool on this operating system (or ``platform``)."""
+    platform = sys.platform if platform is None else platform
+    key = "linux" if platform.startswith("linux") else platform
+    steps = _INSTALL_STEPS.get(key, "  - see https://exiftool.org/install.html")
+    return (
+        "Install ExifTool and make sure it is on your PATH, or give its location with "
+        f"--exiftool PATH:\n{steps}"
+    )
+
 
 DEFAULT_CHUNK_SIZE = 500
 
@@ -65,11 +91,22 @@ def find_exiftool(explicit: str | os.PathLike[str] | None = None) -> Path:
         path = Path(explicit)
         if path.is_file():
             return path
-        raise ExifToolNotFoundError(f"ExifTool not found at: {path}\n{INSTALL_HINT}")
+        raise ExifToolNotFoundError(f"ExifTool not found at: {path}\n{install_hint()}")
     found = shutil.which("exiftool")  # also finds exiftool.exe on Windows via PATHEXT
     if found is None:
-        raise ExifToolNotFoundError(f"ExifTool was not found on PATH.\n{INSTALL_HINT}")
+        raise ExifToolNotFoundError(f"ExifTool was not found on PATH.\n{install_hint()}")
     return Path(found)
+
+
+def exiftool_version(executable: str | os.PathLike[str]) -> str:
+    """The version ExifTool reports for itself (``exiftool -ver``)."""
+    try:
+        proc = subprocess.run(
+            [str(executable), "-ver"], capture_output=True, check=True, timeout=10
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ExifToolError(f"{executable} did not run: {exc}") from exc
+    return proc.stdout.decode("utf-8", errors="replace").strip()
 
 
 def _path_key(path: str | os.PathLike[str]) -> str:

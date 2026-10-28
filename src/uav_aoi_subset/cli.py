@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import platform
 import re
 import sys
+import traceback
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -26,7 +28,13 @@ from uav_aoi_subset.core.copy import (
     write_copy_report,
 )
 from uav_aoi_subset.core.discovery import DEFAULT_PATTERN
-from uav_aoi_subset.core.exif import ExifToolError, ExifToolNotFoundError, ExifToolReader
+from uav_aoi_subset.core.exif import (
+    ExifToolError,
+    ExifToolNotFoundError,
+    ExifToolReader,
+    exiftool_version,
+    find_exiftool,
+)
 from uav_aoi_subset.core.filter import buffer_metres, default_subset_path, filter_records
 from uav_aoi_subset.core.footprint import (
     DEFAULT_RATIO,
@@ -51,6 +59,67 @@ from uav_aoi_subset.core.kml import write_kml
 # How many incomplete captures / missing positions to list in the summary.
 LIST_LIMIT = 20
 
+ISSUES_URL = "https://github.com/sirriselimkalac/uav-aoi-subset/issues"
+
+EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_INTERRUPTED = 0, 1, 2, 130
+EXIT_CODES_HELP = """\
+exit codes:
+  0    success
+  1    error (the message says what to do next) or a picker was cancelled
+  2    usage error: a required argument is missing or an option is invalid
+  130  interrupted with Ctrl+C
+
+Run '%(prog)s COMMAND --help' for the options of a command. Leave out a required path to
+choose it in a file/folder picker (when run interactively)."""
+
+
+def version_text() -> str:
+    """Package, Python and ExifTool versions: what a bug report needs."""
+    lines = [
+        f"uav-aoi-subset {__version__}",
+        f"Python {platform.python_version()} ({platform.platform(terse=True)})",
+    ]
+    try:
+        exiftool = find_exiftool()
+        lines.append(f"ExifTool {exiftool_version(exiftool)} at {exiftool}")
+    except ExifToolNotFoundError:
+        lines.append("ExifTool: not found on PATH (needed by 'index'; see the README)")
+    except ExifToolError as exc:
+        lines.append(f"ExifTool: {exc}")
+    return "\n".join(lines)
+
+
+class _VersionAction(argparse.Action):
+    """Like argparse's version action, but runs ExifTool only when --version is given."""
+
+    def __init__(self, option_strings, dest=argparse.SUPPRESS, help=None):
+        super().__init__(option_strings, dest=dest, default=argparse.SUPPRESS, nargs=0, help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(version_text())
+        parser.exit()
+
+
+def _error(message: str, next_step: str | None = None) -> int:
+    """Print an error and what to do about it; returns the exit code for errors."""
+    print(f"error: {message}", file=sys.stderr)
+    if next_step:
+        print(f"  {next_step}", file=sys.stderr)
+    return EXIT_ERROR
+
+
+def _cannot_write(path: Path, exc: OSError, option: str = "--out") -> int:
+    if isinstance(exc, PermissionError):
+        return _error(
+            f"cannot write {path}: permission denied",
+            "Close the file if another program (e.g. a spreadsheet) has it open, or choose a "
+            f"location you can write to with {option}.",
+        )
+    return _error(
+        f"cannot write {path}: {exc.strerror or exc}",
+        f"Check that the folder exists and the drive is not full, or use {option}.",
+    )
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -60,8 +129,14 @@ def build_parser() -> argparse.ArgumentParser:
             "band) into subsets that fall inside an area of interest drawn as a KML/KMZ "
             "polygon."
         ),
+        epilog=EXIT_CODES_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument(
+        "--version",
+        action=_VersionAction,
+        help="Show the program, Python and ExifTool versions (include them in bug reports).",
+    )
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
     parser.subcommands = sub.choices  # for errors that need the subcommand's usage line
 
@@ -72,6 +147,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Never open a file/folder picker for a missing path; fail with a usage error "
         f"instead (same as setting {pickers.ENV_NO_PICKER}=1).",
+    )
+    common.add_argument(
+        "--debug",
+        action="store_true",
+        help="Show the full traceback when an unexpected error occurs.",
     )
 
     p_index = sub.add_parser(
@@ -323,26 +403,60 @@ def _with_missing_bands(record: IndexRecord) -> str:
 
 
 def _pattern_ok(pattern: str) -> bool:
+    example = f"The default is: --pattern '{DEFAULT_PATTERN}'"
     try:
         regex = re.compile(pattern)
     except re.error as exc:
-        print(f"error: invalid --pattern: {exc}", file=sys.stderr)
+        _error(f"invalid --pattern: {exc}", f"Check the regular expression. {example}")
         return False
     if not {"base", "band"} <= set(regex.groupindex):
-        print("error: --pattern must define the groups 'base' and 'band'", file=sys.stderr)
+        _error(
+            "--pattern must define the groups 'base' and 'band'",
+            f"Name them with (?P<base>...) and (?P<band>...). {example}",
+        )
         return False
     return True
+
+
+def _not_a_folder(path: Path, name: str) -> int:
+    return _error(
+        f"not a folder: {path}",
+        f"Check the path (in quotes if it contains spaces), or leave {name} out to choose "
+        "it in a folder picker.",
+    )
+
+
+def _not_a_file(path: Path, name: str) -> int:
+    return _error(
+        f"not a file: {path}",
+        f"Check the path (in quotes if it contains spaces), or leave {name} out to choose "
+        "it in a file picker.",
+    )
+
+
+def _bands_ok(bands: int) -> bool:
+    if bands < 1:
+        _error("--bands must be at least 1", "Give the number of band files per capture.")
+        return False
+    return True
+
+
+def _read_records(path: Path) -> list[IndexRecord] | None:
+    try:
+        return read_index_csv(path)
+    except (ValueError, OSError) as exc:
+        _error(
+            f"cannot read {path}: {exc}",
+            "Give a CSV written by 'index' or 'filter' (close it in other programs first).",
+        )
+        return None
 
 
 def _run_index(args: argparse.Namespace) -> int:
     root: Path = args.root
     if not root.is_dir():
-        print(f"error: not a folder: {root}", file=sys.stderr)
-        return 1
-    if args.bands < 1:
-        print("error: --bands must be at least 1", file=sys.stderr)
-        return 1
-    if not _pattern_ok(args.pattern):
+        return _not_a_folder(root, "ROOT")
+    if not _bands_ok(args.bands) or not _pattern_ok(args.pattern):
         return 1
 
     progress = ConsoleProgress()
@@ -356,18 +470,29 @@ def _run_index(args: argparse.Namespace) -> int:
             exclude=args.exclude,
             progress=progress,
         )
-    except (ExifToolNotFoundError, ExifToolError, RecordNameCollisionError) as exc:
+    except ExifToolNotFoundError as exc:
+        return _error(str(exc))  # the message already says how to install it
+    except ExifToolError as exc:
+        return _error(
+            str(exc), "Check that 'exiftool -ver' works; re-run with --debug for details."
+        )
+    except RecordNameCollisionError as exc:
+        return _error(str(exc))  # names the folders to rename
+    finally:
         progress.finish()
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    progress.finish()
 
     if not records:
-        print(f"No band files matching the pattern were found under {root}.", file=sys.stderr)
-        return 1
+        return _error(
+            f"no band files matching the pattern were found under {root}",
+            "Check ROOT, --pattern and --bands, and that --exclude does not skip the image "
+            "folders.",
+        )
 
     out = args.out or default_index_path(root)
-    write_index_csv(records, out)
+    try:
+        write_index_csv(records, out)
+    except OSError as exc:
+        return _cannot_write(out, exc)
 
     incomplete = [r for r in records if not r.complete]
     no_position = [r for r in records if not r.has_position]
@@ -389,22 +514,34 @@ def _run_index(args: argparse.Namespace) -> int:
 def _run_filter(args: argparse.Namespace) -> int:
     index_csv: Path = args.index_csv
     if not index_csv.is_file():
-        print(f"error: not a file: {index_csv}", file=sys.stderr)
-        return 1
+        return _not_a_file(index_csv, "INDEX_CSV")
+    if not args.aoi.is_file():
+        return _not_a_file(args.aoi, "--aoi")
     out = args.out or default_subset_path(args.aoi)
     if out.resolve() == index_csv.resolve():
-        print(f"error: the output would overwrite the input index: {out}", file=sys.stderr)
+        return _error(
+            f"the output would overwrite the input index: {out}", "Give another path with --out."
+        )
+    records = _read_records(index_csv)
+    if records is None:
         return 1
     try:
-        records = read_index_csv(index_csv)
         aoi = load_aoi(args.aoi)
+    except AOIError as exc:
+        return _error(
+            str(exc),
+            "Save the area as a polygon (not a path or a placemark) in a .kml or .kmz file.",
+        )
+    try:
         area = buffer_metres(aoi.geometry, args.buffer)
-    except (AOIError, ValueError, OSError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+    except ValueError as exc:
+        return _error(str(exc), "Use a smaller negative --buffer, or none.")
 
     result = filter_records(records, area)
-    write_index_csv(result.inside, out)
+    try:
+        write_index_csv(result.inside, out)
+    except OSError as exc:
+        return _cannot_write(out, exc)
 
     incomplete = [r for r in result.inside if not r.complete]
     print(f"AOI:                {args.aoi}")
@@ -497,27 +634,22 @@ def _print_copy_summary(plan: CopyPlan, dry_run: bool) -> None:
 def _run_copy(args: argparse.Namespace) -> int:
     root: Path = args.root
     if not root.is_dir():
-        print(f"error: not a folder: {root}", file=sys.stderr)
-        return 1
+        return _not_a_folder(root, "ROOT")
     if not args.subset_csv.is_file():
-        print(f"error: not a file: {args.subset_csv}", file=sys.stderr)
-        return 1
-    if args.bands < 1:
-        print("error: --bands must be at least 1", file=sys.stderr)
-        return 1
-    if not _pattern_ok(args.pattern):
+        return _not_a_file(args.subset_csv, "SUBSET_CSV")
+    if not _bands_ok(args.bands) or not _pattern_ok(args.pattern):
         return 1
     if args.mode == "move" and not args.confirm_move:
-        print(
-            "error: --mode move removes the band files from ROOT; add --confirm-move if that "
-            "is what you want (or use --mode copy / hardlink)",
-            file=sys.stderr,
+        return _error(
+            "--mode move removes the band files from ROOT",
+            "Add --confirm-move if that is what you want, or use --mode copy / hardlink.",
         )
-        return 1
 
+    records = _read_records(args.subset_csv)
+    if records is None:
+        return 1
     progress = ConsoleProgress()
     try:
-        records = read_index_csv(args.subset_csv)
         extras = load_extra_captures(args.extra_captures)
         dest = args.dest or default_dest(root)
         plan = plan_copy(
@@ -535,11 +667,14 @@ def _run_copy(args: argparse.Namespace) -> int:
             subset_name=args.subset_csv.name,
             progress=progress,
         )
-    except (CopyError, ValueError, OSError) as exc:
+    except CopyError as exc:
+        return _error(str(exc))  # copy errors already name the option to change
+    except PermissionError as exc:
+        return _cannot_write(Path(exc.filename or args.dest or root), exc, "--dest")
+    except (ValueError, OSError) as exc:
+        return _error(str(exc), "Check ROOT, SUBSET_CSV, --dest and --extra-captures.")
+    finally:
         progress.finish()
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    progress.finish()
 
     print(f"Output folder:      {plan.dest}")
     if args.dest is None and not args.dry_run:
@@ -554,13 +689,14 @@ def _run_copy(args: argparse.Namespace) -> int:
 
     if not plan.enough_space:
         _print_copy_summary(plan, dry_run=True)
-        print(
-            f"\nerror: not enough free space at {plan.dest}: "
+        print(file=sys.stderr)
+        return _error(
+            f"not enough free space at {plan.dest}: "
             f"{_fmt_bytes(required_space(plan.bytes_needed))} needed, "
             f"{_fmt_bytes(plan.bytes_free)} free",
-            file=sys.stderr,
+            "Free some space, choose a --dest on another drive, or use --mode hardlink "
+            "(same drive only, needs no extra space).",
         )
-        return 1
 
     failed = None
     if not args.dry_run:
@@ -568,6 +704,15 @@ def _run_copy(args: argparse.Namespace) -> int:
             execute_copy(plan, progress=progress)
         except CopyError as exc:
             failed = exc
+        except KeyboardInterrupt:
+            progress.finish()
+            _write_report_quietly(plan, args.report or default_report_path(plan.dest))
+            print(
+                "\nUnfinished files were removed. To resume, run the same command "
+                f'with --dest "{plan.dest}"',
+                file=sys.stderr,
+            )
+            raise
         finally:
             progress.finish()
 
@@ -578,33 +723,47 @@ def _run_copy(args: argparse.Namespace) -> int:
             write_copy_report(plan.tasks, report)
             print(f"\nReport written to: {report}")
         except OSError as exc:
-            print(f"error: cannot write the report {report}: {exc}", file=sys.stderr)
-            return 1
+            return _cannot_write(report, exc, "--report")
     if failed is not None:
-        print(f"\nerror: {failed}", file=sys.stderr)
-        return 1
+        print(file=sys.stderr)
+        return _error(str(failed))
     st = plan.summary().statuses
     return 1 if st["conflict"] or st["failed"] else 0
 
 
+def _write_report_quietly(plan: CopyPlan, report: Path) -> None:
+    """Best effort after an interruption: the report shows what was done so far."""
+    try:
+        write_copy_report(plan.tasks, report)
+        print(f"\nReport of the files done so far: {report}", file=sys.stderr)
+    except OSError:
+        pass
+
+
 def _footprint_args_ok(args: argparse.Namespace, out: Path) -> bool:
     if not args.index_csv.is_file():
-        print(f"error: not a file: {args.index_csv}", file=sys.stderr)
+        _not_a_file(args.index_csv, "INDEX_CSV")
         return False
     if args.ratio is not None and args.hull != "concave":
-        print("error: --ratio only applies to --hull concave", file=sys.stderr)
+        _error("--ratio only applies to --hull concave", "Add --hull concave or drop --ratio.")
         return False
     if args.ratio is not None and not 0 < args.ratio <= 1:
-        print("error: --ratio must be greater than 0 and at most 1", file=sys.stderr)
+        _error(
+            "--ratio must be greater than 0 and at most 1",
+            f"Try the default {DEFAULT_RATIO:g}; smaller values follow the captures more tightly.",
+        )
         return False
     if args.per_folder is not None and args.per_folder < 0:
-        print("error: --per-folder DEPTH must be at least 1", file=sys.stderr)
+        _error(
+            "--per-folder DEPTH must be at least 1",
+            "Leave DEPTH out for one polygon per capture folder.",
+        )
         return False
     if out.suffix.lower() != ".kml":
-        print(f"error: the output must be a .kml file: {out}", file=sys.stderr)
+        _error(f"the output must be a .kml file: {out}", "Give a path ending in .kml to --out.")
         return False
     if out.exists() and not args.overwrite:
-        print(f"error: {out} exists; add --overwrite to replace it", file=sys.stderr)
+        _error(f"{out} exists", "Add --overwrite to replace it, or choose another --out.")
         return False
     return True
 
@@ -638,8 +797,10 @@ def _run_footprint(args: argparse.Namespace) -> int:
     if not _footprint_args_ok(args, out):
         return 1
     per_folder = args.per_folder is not None
+    records = _read_records(index_csv)
+    if records is None:
+        return 1
     try:
-        records = read_index_csv(index_csv)
         result = build_footprints(
             records,
             name=index_csv.stem,
@@ -659,11 +820,14 @@ def _run_footprint(args: argparse.Namespace) -> int:
             overwrite=args.overwrite,
         )
     except FileExistsError:
-        print(f"error: {out} exists; add --overwrite to replace it", file=sys.stderr)
-        return 1
-    except (FootprintError, ValueError, OSError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+        return _error(f"{out} exists", "Add --overwrite to replace it, or choose another --out.")
+    except (FootprintError, ValueError) as exc:
+        return _error(
+            str(exc),
+            "Check that the CSV has capture positions (run 'index' with ExifTool available).",
+        )
+    except OSError as exc:
+        return _cannot_write(out, exc)
 
     _print_footprint_summary(result, per_folder)
     print(f"\nFootprint written to: {out}")
@@ -774,16 +938,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command is None:
         parser.print_help()
         return 2
-    stop = _fill_missing_paths(parser, args, tokens)
-    if stop is not None:
-        return stop
-    if args.command == "index":
-        return _run_index(args)
-    if args.command == "filter":
-        return _run_filter(args)
-    if args.command == "copy":
-        return _run_copy(args)
-    if args.command == "footprint":
-        return _run_footprint(args)
-    print(f"uav-aoi-subset {args.command}: not implemented yet.", file=sys.stderr)
-    return 2
+    try:
+        stop = _fill_missing_paths(parser, args, tokens)
+        if stop is not None:
+            return stop
+        return COMMANDS[args.command](args)
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr)
+        return EXIT_INTERRUPTED
+    except Exception as exc:
+        if args.debug:
+            traceback.print_exc()
+        print(f"error: unexpected {type(exc).__name__}: {exc}", file=sys.stderr)
+        if not args.debug:
+            print("  Re-run with --debug to see the details.", file=sys.stderr)
+        print(
+            f"  Please report it at {ISSUES_URL} with the command, its output and the "
+            "output of 'uav-aoi-subset --version'.",
+            file=sys.stderr,
+        )
+        return EXIT_ERROR
+
+
+COMMANDS = {
+    "index": _run_index,
+    "filter": _run_filter,
+    "copy": _run_copy,
+    "footprint": _run_footprint,
+}
