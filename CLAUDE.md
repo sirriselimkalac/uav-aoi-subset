@@ -138,7 +138,7 @@ Later: Docker image (secondary distribution), tkinter GUI, QGIS plugin, benchmar
 ## Status (update at the end of each milestone)
 
 Done: **1 scaffold**, **2 index** (CI green on ubuntu/macOS/windows × Python 3.11/3.12),
-**3 filter** (CI green on all 6 jobs, 94 tests).
+**3 filter** (CI green on all 6 jobs, 94 tests), **4 copy** (CI green on all 6 jobs, 136 tests).
 Package version is `0.0.1` until the v0.1.0 tag (milestone 8). Repo is private until then.
 
 Decisions made so far:
@@ -174,13 +174,33 @@ Decisions made so far:
   YYYYMMDD.csv` next to the AOI. `filter` refuses to overwrite its input; an empty result
   still writes a header-only CSV (exit 0, warning). Runtime deps: shapely, pyproj, numpy.
 
-Next: milestone 4 (`copy`). Watch out for:
-- Read the subset with `read_index_csv`; locate band files via `RelativeFolder` + `ImageBase`
-  (fall back to matching `record_name` from `discover_captures` for MATLAB CSVs that lack them).
-- Flatten with `flat_folder_name`; collisions → `_v02`, `_v03`. Default dest outside ROOT, and
-  drop the `OUTPUT_MARKER` file in it. Resume = skip same-size files; never overwrite silently;
-  `move` needs an explicit flag. CSV report next to the output.
-- Read `../COPY_GEOTIFFS_FROM_CSV.m` first.
+- Copy (`core/copy.py`): `plan_copy` (no disk writes; is also the dry run) → `execute_copy`.
+  One `discover_captures` walk; match on `(NFC RelativeFolder, ImageBase.upper())`, MATLAB CSVs
+  on exact NFC `RecordName` (2+ candidates → `ambiguous`, no fuzzy scoring). Extra captures are
+  looked up WITHOUT `--exclude`. `assign_flat_folders`: sorted, case-insensitive collisions →
+  `_v02`. Default dest `<ROOT parent>/<ROOT name>_subsets/<CSV stem>`; refuses a non-empty dest
+  without `OUTPUT_MARKER` and a dest that contains ROOT; warns if inside ROOT. Writes go to
+  `<name>.uas-partial` then `replace`. Same size → `skipped-existing`; different size →
+  `conflict` (exit 1) unless `--overwrite`. Hardlink: other drive (per-file `st_dev`) refused at
+  plan time, a failed link aborts the run — never falls back to copying. Move needs
+  `--confirm-move`; cross-drive = copy + verify + delete; bands already at the dest →
+  `already-at-destination`. Include files are copied (never moved) to the dest root. Free space
+  must be ≥ needed × 1.02 + 100 MB. All file-system calls go through `long_path` (`\\?\` on
+  Windows); paths > 259 chars give a Pix4D warning. Report CSV columns `Kind, RecordName, Band,
+  Source, Destination, Status, Bytes, Message`, written next to the dest with a timestamp; dry
+  runs write it only with `--report`.
+
+Next: milestone 5 (`footprint`). Watch out for:
+- Read `../CSV_TO_MINAREA_POLYGON_KML.m` first. It takes the convex hull of all valid lat/lon
+  (MATLAB projected to a local equirectangular plane first) and writes one KML polygon named
+  after the CSV, next to it (`<csv stem>.kml`).
+- Read the CSV with `read_index_csv` (MATLAB CSVs too); skip records without a position and
+  report how many; need ≥ 3 non-collinear points, else a clear error.
+- Core: a pure `footprint(records) -> Polygon` (shapely `convex_hull` on lon/lat is fine at field
+  scale; optionally a `--buffer` in metres via `filter.buffer_metres`) and a separate KML writer
+  (`lon,lat,0`, closed ring, counter-clockwise outer ring, `xmlns` KML 2.2, UTF-8). Keep the writer
+  reusable, and check the output loads with our own `load_aoi` (round-trip test).
+- Never overwrite the input CSV or an existing KML silently.
 
 ## Data and privacy rules
 
