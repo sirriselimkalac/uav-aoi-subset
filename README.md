@@ -13,8 +13,9 @@ A free, open-source alternative to commercial GIS tools for this one job.
      you hit (dataset too large to process in one go, splitting by hand, paying for a GIS
      licence only for this step) and why you built this. Keep it free of brand names. -->
 
-> **Status:** work in progress, not yet validated on real data. `index`, `filter`, `copy`
-> and `footprint` work. The command-line interface below is the target shape.
+> **Status:** work in progress, not yet validated on real data. All four commands (`index`,
+> `filter`, `copy`, `footprint`) work and are tested on Windows, macOS and Linux with
+> synthetic data.
 
 ## Where it fits
 
@@ -102,38 +103,136 @@ precaution we could think of has been taken to keep it that way:
 Other cameras, firmware versions or processing software may still behave in ways we could
 not foresee: different file naming or folder layouts, missing or unusual GPS tags, or
 import problems in your software. If you run into such a problem, please
-[open an issue](https://github.com/sirriselimkalac/uav-aoi-subset/issues) and include the
+[open an issue with the bug report form](https://github.com/sirriselimkalac/uav-aoi-subset/issues/new?template=bug_report.yml); it asks for the
 camera and software (with versions), the command you ran and its output, and the output of
 `uav-aoi-subset --version`. No imagery is needed. We will do our best to fix it.
 
 Product names are trademarks of their respective owners and are mentioned only to describe
 the test setup; this project is not affiliated with or endorsed by them.
 
-## Requirements
-
-- [uv](https://docs.astral.sh/uv/) (it installs a suitable Python, 3.11 or newer)
-- [ExifTool](https://exiftool.org/) on your `PATH`:
-  - macOS: `brew install exiftool`
-  - Windows: the installer from [exiftool.org](https://exiftool.org/) or `choco install exiftool`
-  - Debian/Ubuntu: `sudo apt install libimage-exiftool-perl`
-
 ## Installation
+
+You need three things: **uv** (it installs a suitable Python, 3.11 or newer, for you),
+**ExifTool** (reads the GPS tags) and this tool. No administrator rights are needed on
+Windows if you follow the "without admin" routes below.
+
+> **Open a new terminal window after every installation step** (on Windows: close
+> PowerShell and open it again). Programs that were just installed or added to `PATH` are
+> only found in windows opened afterwards.
+
+### 1. uv
+
+- **Windows** (PowerShell):
+
+  ```powershell
+  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+  ```
+
+  If scripts or downloads from PowerShell are blocked (common on company computers), use one
+  of these instead:
+  - `winget install --id astral-sh.uv -e`
+  - or, if Python is already installed: `py -m pip install --user uv`
+  - or, without any installer: download `uv-x86_64-pc-windows-msvc.zip` from the
+    [uv releases page](https://github.com/astral-sh/uv/releases), extract `uv.exe` into a folder
+    of your own (for example `C:\Tools\uv`) and add that folder to your `PATH` (see
+    [Adding a folder to PATH on Windows](#adding-a-folder-to-path-on-windows)).
+- **macOS / Linux**: `curl -LsSf https://astral.sh/uv/install.sh | sh` (or `brew install uv`).
+
+Check in a new window: `uv --version`
+
+### 2. ExifTool
+
+- **Windows**, one of:
+  - `winget install --id OliverBetz.ExifTool -e` (installer, puts ExifTool on `PATH`);
+  - the Windows installer linked from [exiftool.org](https://exiftool.org/);
+  - **without an installer:** download the Windows executable ZIP from
+    [exiftool.org](https://exiftool.org/) and extract it to a folder of your own, for example
+    `C:\Tools\exiftool`. Rename `exiftool(-k).exe` to **`exiftool.exe`** (with the `(-k)` in
+    the name ExifTool waits for a key press and the tool would hang) and keep the
+    `exiftool_files` folder next to it. Then either add `C:\Tools\exiftool` to your `PATH`, or
+    skip that and give the full path when indexing:
+    `uav-aoi-subset index ROOT --exiftool C:\Tools\exiftool\exiftool.exe`.
+  - `choco install exiftool` also works but needs an administrator PowerShell.
+- **macOS**: `brew install exiftool`, or the macOS package from [exiftool.org](https://exiftool.org/).
+- **Debian/Ubuntu**: `sudo apt install libimage-exiftool-perl`; **Fedora**:
+  `sudo dnf install perl-Image-ExifTool`.
+
+Check in a new window: `exiftool -ver`
+
+### 3. This tool
+
+With Git:
 
 ```bash
 git clone https://github.com/sirriselimkalac/uav-aoi-subset.git
 cd uav-aoi-subset
 uv sync
-uv run uav-aoi-subset --help
+uv run uav-aoi-subset --version
 ```
 
-## Usage (target)
+**Without Git:** on the [repository page](https://github.com/sirriselimkalac/uav-aoi-subset)
+choose *Code → Download ZIP*, extract it (for example to `C:\Tools\uav-aoi-subset-main`),
+then in PowerShell:
+
+```powershell
+cd C:\Tools\uav-aoi-subset-main
+uv sync
+uv run uav-aoi-subset --version
+```
+
+`--version` prints three lines: the tool, Python and the ExifTool it found. If the last line
+says ExifTool was not found, see step 2.
+
+`uv run uav-aoi-subset …` works inside this folder. To type `uav-aoi-subset …` in any folder
+instead, install it as a command once, then open a new window:
+
+```bash
+uv tool install .
+uv tool update-shell      # adds uv's command folder to PATH, if needed
+```
+
+(After downloading a newer version, run `uv tool install . --reinstall` again.)
+
+### Adding a folder to PATH on Windows
+
+Start menu → type *environment variables* → *Edit environment variables for your account*
+(no administrator rights needed) → select *Path* → *Edit* → *New* → paste the folder, for
+example `C:\Tools\exiftool` → *OK*. Open a new PowerShell window.
+
+### Troubleshooting the installation
+
+| Message | What to do |
+|---|---|
+| `uv : The term 'uv' is not recognized` | Open a new PowerShell window. If it persists, uv's folder is not on `PATH`: use another route from step 1. |
+| `running scripts is disabled on this system` | Use `winget`, `pip` or the ZIP route of step 1; the tool itself needs no script permission. |
+| `ExifTool was not found on PATH` | Install it (step 2) and open a new window, or pass `--exiftool C:\path\to\exiftool.exe`. |
+| ExifTool seems to hang | The file is still called `exiftool(-k).exe`; rename it to `exiftool.exe`. |
+| Warnings about long paths after `copy` | Choose a shorter `--dest`, for example `D:\subsets\north`. |
+
+## Usage
+
+A typical run, from a flight folder tree to one folder of images per area:
+
+```bash
+uav-aoi-subset index     D:\survey                        # D:\survey\survey_image_index_YYYYMMDD.csv
+uav-aoi-subset footprint D:\survey\survey_image_index_YYYYMMDD.csv   # outline, helps drawing AOIs
+uav-aoi-subset filter    D:\survey\survey_image_index_YYYYMMDD.csv --aoi D:\aoi\north.kml
+uav-aoi-subset copy      D:\survey D:\aoi\north_image_index_YYYYMMDD.csv --dry-run
+uav-aoi-subset copy      D:\survey D:\aoi\north_image_index_YYYYMMDD.csv    # D:\survey_subset_01
+```
+
+(Use `uv run uav-aoi-subset …` inside the tool's folder if you did not install it as a command.)
+
+All commands and options:
 
 ```
 uav-aoi-subset index     ROOT [--bands 7] [--pattern ...] [--exclude DIR_GLOB ...] [--out CSV]
+                         [--exiftool PATH]
 uav-aoi-subset filter    INDEX_CSV --aoi AREA.kml|.kmz [--buffer METRES] [--out CSV]
+                         [--skip-duplicates]
 uav-aoi-subset copy      ROOT SUBSET_CSV [--dest DIR] [--mode copy|hardlink|move]
                          [--layout flat|folders] [--dry-run] [--include FILE_GLOB ...]
-                         [--extra-captures ...]
+                         [--extra-captures ...] [--skip-duplicates]
 uav-aoi-subset footprint INDEX_CSV [--out KML] [--hull convex|concave] [--ratio R]
                          [--buffer METRES] [--per-folder [DEPTH]] [--overwrite]
 uav-aoi-subset --version
@@ -164,6 +263,31 @@ redirected input, from a scheduler or on a server without a display. In those ca
 path is a usage error (exit code 2), as in any command-line tool. To switch pickers off
 completely, add `--no-picker` or set the environment variable `UAV_AOI_SUBSET_NO_PICKER=1`.
 
+### What index skips, and copies of the same capture
+
+`index` (and `copy`, which looks the captures up again) walks every folder under ROOT except:
+
+- hidden folders (name starting with `.`) and Windows system folders such as
+  `$RECYCLE.BIN` and `System Volume Information`;
+- output folders written by `copy` (they contain a `.uav-aoi-subset-output` file);
+- folders matching `--exclude`;
+- linked folders (symbolic links, Windows junctions), which are never followed, so link loops
+  cannot make the scan endless;
+- folders it is not allowed to read.
+
+The last two are listed under *Folders not scanned* in the summary; the run goes on without
+them.
+
+When the same capture is found in more than one folder (same image name, capture time and
+position, for example an old subset folder or a backup kept inside ROOT), `index`, `filter`
+and `copy` list these copies but keep going. Leave them out with `--exclude <their folder>`,
+or with `--skip-duplicates` in `filter` or `copy`, which keeps the first folder of each group
+(in alphabetical order) and lists the others.
+
+If ROOT is the top of a drive (`D:\`), there is no folder next to it, so `copy` writes to
+`D:\D_subset_01` inside it instead (later `index` runs skip it) and the index CSV is named
+`D_image_index_YYYYMMDD.csv`.
+
 ### Progress and errors
 
 Long steps (scanning folders, reading GPS tags, copying) show a progress bar with the count,
@@ -173,7 +297,7 @@ tool writes one line per 10 % instead, so logs stay readable.
 Every error message says what to do next. Ctrl+C stops the tool cleanly; an interrupted
 `copy` removes unfinished files and tells you how to resume. If something unexpected goes
 wrong, the tool prints a short message; run the same command again with `--debug` to see the
-full details, and please [report it](https://github.com/sirriselimkalac/uav-aoi-subset/issues).
+full details, and please [report it](https://github.com/sirriselimkalac/uav-aoi-subset/issues/new?template=bug_report.yml).
 
 ### Exit codes
 
