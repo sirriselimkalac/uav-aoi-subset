@@ -267,6 +267,22 @@ def test_sub_folders_of_input_are_ignored_with_a_warning(tmp_path):
     assert len(discover_captures(tmp_path / "out")) == 4
 
 
+def test_outputs_of_the_tool_are_not_copied(tmp_path):
+    data = flat_dataset(tmp_path / "flat", captures=4)
+    for name in (
+        "flat_image_index_20261028.csv",
+        "x_copy_report_20261028-101500.csv",
+        "old_mapping.csv",
+    ):
+        (data / name).write_text("x", encoding="utf-8")
+    code, stdout, _ = run("build", data, tmp_path / "out")
+    assert code == 0
+    assert stdout.count("Not copied (written by uav-aoi-subset)") == 3
+    assert [f for f in tree(tmp_path / "out") if f.endswith(".csv")] == [
+        "0000SET/000/panel_reflectance.csv"
+    ]
+
+
 def test_ctrl_c_leaves_no_partial_file(tmp_path, monkeypatch, capsys):
     data = flat_dataset(tmp_path / "flat", captures=4)
     out = tmp_path / "out"

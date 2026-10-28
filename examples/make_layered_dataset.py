@@ -62,6 +62,10 @@ MAPPING_COLUMNS = (
 )
 
 _TRAILING_NUMBER = re.compile(r"^(?P<prefix>.*?)(?P<number>\d+)$")
+# Files uav-aoi-subset writes (index / subset CSVs, copy reports); never part of the dataset.
+_TOOL_OUTPUT = re.compile(
+    r"(_image_index_\d{8}|_copy_report_\d{8}-\d{6}|_mapping)\.csv$", re.IGNORECASE
+)
 
 
 class LayoutError(Exception):
@@ -102,6 +106,7 @@ class Layout:
     groups: list[list[str]]  # original image bases per group, in order
     incomplete: int
     ignored_folders: list[str]
+    tool_outputs: list[str]
 
 
 def _fs(path: Path | str) -> Path:
@@ -141,6 +146,7 @@ def plan_layout(
     bases: dict[str, str] = {}
     auxiliary: list[Path] = []
     ignored: list[str] = []
+    tool_outputs: list[str] = []
     for entry in sorted(_fs(input_dir).iterdir(), key=lambda p: p.name):
         if entry.name.startswith("."):
             continue
@@ -150,7 +156,10 @@ def plan_layout(
         source = Path(input_dir) / entry.name
         match = regex.match(entry.name)
         if match is None:
-            auxiliary.append(source)
+            if _TOOL_OUTPUT.search(entry.name):
+                tool_outputs.append(entry.name)
+            else:
+                auxiliary.append(source)
             continue
         key = match.group("base").upper()
         bases.setdefault(key, match.group("base"))
@@ -221,7 +230,7 @@ def plan_layout(
     incomplete = sum(
         not wanted <= {int(m.group("band")) for _, m in files} for files in captures.values()
     )
-    return Layout(items, groups, incomplete, ignored)
+    return Layout(items, groups, incomplete, ignored, tool_outputs)
 
 
 def mapping_path(output: Path) -> Path:
@@ -382,6 +391,8 @@ def run_build(args: argparse.Namespace) -> int:
         )
     for name in layout.ignored_folders:
         print(f"warning: sub-folder ignored (only files directly in INPUT are used): {name}")
+    for name in layout.tool_outputs:
+        print(f"Not copied (written by uav-aoi-subset): {name}")
     print(f"Files to write:   {len(items):,} ({args.mode})")
     print(f"Space needed:     {_fmt_bytes(needed)} (free: {_fmt_bytes(free)})")
     if needed and free < required_space(needed):
