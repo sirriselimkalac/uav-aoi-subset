@@ -1,0 +1,39 @@
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Imagery and archives (never commit data)
+*.tif
+*.tiff
+*.TIF
+*.TIFF
+*.zip
+*.ZIP
+data/
+outputs/
+output/
+
+# Tool outputs (index / subset CSVs, copy reports)
+*_image_index_*.csv
+*_copy_report*.csv
+
+# Pix4D projects and outputs
+*.p4d
+*.p4d.bak
+*_pix4d/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
