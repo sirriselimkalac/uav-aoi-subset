@@ -83,6 +83,32 @@ tool.
      in practice and the offset you saw between a subset's mosaic and the AOI. Fill in after
      the real-data validation. -->
 
+## Tested setup and compatibility
+
+<!-- KEEP: this section is the only place where the README names the author's hardware and
+     software. It is a deliberate transparency statement; do not remove or neutralise it. -->
+
+The author developed and tested this tool on his own field data, captured with a
+**MicaSense Altum-PT** multispectral camera and processed in **Pix4Dmapper**.
+
+The code itself is meant to be independent of any camera or software brand, and every
+precaution we could think of has been taken to keep it that way:
+
+- the band count and the file-name pattern are parameters (`--bands`, `--pattern`);
+- positions are read from the standard EXIF GPS tags with ExifTool;
+- areas of interest are standard KML/KMZ polygons;
+- the output is plain folders and CSV files that any photogrammetry or GIS software can read.
+
+Other cameras, firmware versions or processing software may still behave in ways we could
+not foresee: different file naming or folder layouts, missing or unusual GPS tags, or
+import problems in your software. If you run into such a problem, please
+[open an issue](https://github.com/sirriselimkalac/uav-aoi-subset/issues) and include the
+camera and software (with versions), the command you ran and its output. No imagery is
+needed. We will do our best to fix it.
+
+Product names are trademarks of their respective owners and are mentioned only to describe
+the test setup; this project is not affiliated with or endorsed by them.
+
 ## Requirements
 
 - [uv](https://docs.astral.sh/uv/) (it installs a suitable Python, 3.11 or newer)
@@ -117,6 +143,16 @@ combines them, and leaves out captures inside polygon holes. Points on the bound
 as inside. `--buffer 20` grows the area by 20 m (computed in the local UTM zone); a negative
 value shrinks it. The output has the same columns as the index CSV and is written next to
 the AOI file as `<AOI name>_image_index_YYYYMMDD.csv`.
+
+## Example dataset
+
+To try the tool without your own data, you can use the public dataset
+[Altum-PT data of a blueberry field](https://eaglenxt.com/data-set/altum-pt-data-of-a-blueberry-field/)
+published by EagleNXT (480 captures × 7 bands, about 19 GB as a ZIP archive).
+
+The data is not included in or redistributed by this repository. Download it from the
+provider's page; its terms of use are set by the provider. A step-by-step worked example
+with ready-made AOI files will be added to [`examples/`](examples/).
 
 ## Development
 

@@ -98,8 +98,10 @@ assets.
    - [ ] README links work, images render, the CI badge is green.
    - [ ] No `<!-- AUTHOR:` placeholder is left in README.md (`grep -n "AUTHOR:" README.md`):
          the user has written every block.
-   - [ ] README and CLI help (`uav-aoi-subset --help`, each command's `--help`) name no
-         camera, drone or photogrammetry software brands.
+   - [ ] CLI help (`uav-aoi-subset --help`, each command's `--help`) names no camera, drone or
+         photogrammetry software brands. In README.md, brands appear ONLY in the
+         "Tested setup and compatibility" section (which must still be present, complete
+         and marked `<!-- KEEP -->`) and in the dataset citation.
    - [ ] Version `0.1.0` in `pyproject.toml`; `uv lock`; the classifier is still
          "Pre-Alpha"/"Alpha" as appropriate.
    - [ ] The commit author email on all commits is the GitHub noreply address.

@@ -289,11 +289,20 @@ Next: milestone 6 (picker fallback, progress bars, polished errors). Watch out f
 
 ## Working style
 
-- **Public docs are brand-neutral.** README, CLI help and other user-facing text must not
-  name camera, drone or photogrammetry software brands (we cannot know the user's setup):
-  say "multispectral camera", "photogrammetry software", "GIS". File-name patterns such as
-  `IMG_0000_1.tif` are fine. Internal docs (this file, docs/VALIDATION.md, docs/RELEASE.md)
-  may name the author's own tools.
+- **Public docs are brand-neutral, with two protected exceptions.** README, CLI help and
+  other user-facing text must not name camera, drone or photogrammetry software brands (we
+  cannot know the user's setup): say "multispectral camera", "photogrammetry software",
+  "GIS". File-name patterns such as `IMG_0000_1.tif` are fine. Internal docs (this file,
+  docs/VALIDATION.md, docs/RELEASE.md) may name the author's own tools.
+  Exceptions that MUST stay, verbatim in meaning, and must never be deleted, shortened or
+  "neutralised" by this rule or any later clean-up:
+  1. README section **"Tested setup and compatibility"** (marked `<!-- KEEP -->`): the
+     author's honest statement that he tested with a MicaSense Altum-PT and Pix4Dmapper,
+     the list of brand-independence measures, the request for feedback via GitHub issues
+     and the promise to fix problems, and the trademark note. Update its facts if the code
+     changes (e.g. new parameters), but keep all four parts.
+  2. Dataset citations (the "Example dataset" section and `examples/`), which name the
+     dataset by its published title.
 - **`<!-- AUTHOR: ... -->` blocks in README.md are written by the user.** Never fill them
   in, rewrite or delete them; keep them in place when restructuring the README.
 - The README section "Positional accuracy" was written with the user; keep its meaning
