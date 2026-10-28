@@ -9,8 +9,8 @@ separately in Pix4Dmapper.
 
 A free, open-source alternative to commercial GIS tools for this one job.
 
-> **Status:** work in progress. The command-line interface below is the target shape; the
-> commands are not implemented yet.
+> **Status:** work in progress. `index` works; `filter`, `copy` and `footprint` are not
+> implemented yet. The command-line interface below is the target shape.
 
 ## Where it fits
 
@@ -20,9 +20,12 @@ raw captures  →  AOI subset (this tool)  →  Pix4D processing  →  ML tiling
 
 ## How it works
 
-1. **index**: scan a flight folder tree, group the per-band files (`IMG_0000_1.tif …
-   IMG_0000_7.tif`) into captures, check that every band is present and read the capture
-   position from the GPS tags of band 1.
+1. **index**: scan a flight folder tree at any depth, group the per-band files
+   (`IMG_0000_1.tif … IMG_0000_7.tif`) into captures, check that every band is present and
+   read the capture position from the GPS tags of band 1. A capture is identified by its
+   folder *and* image number, because cameras such as the Altum-PT restart numbering in
+   every `####SET` folder. Use `--exclude 'Calibration*'` to skip folders such as
+   calibration-panel shots.
 2. **filter**: keep the captures that fall inside one or more AOI polygons (KML/KMZ, with
    holes and an optional buffer in metres).
 3. **copy**: copy (or hard-link) the band files of the selected captures into a flat folder
@@ -50,7 +53,7 @@ uv run uav-aoi-subset --help
 ## Usage (target)
 
 ```
-uav-aoi-subset index     ROOT [--bands 7] [--pattern ...] [--out CSV]
+uav-aoi-subset index     ROOT [--bands 7] [--pattern ...] [--exclude DIR_GLOB ...] [--out CSV]
 uav-aoi-subset filter    INDEX_CSV --aoi AREA.kml|.kmz [--buffer METRES] [--out CSV]
 uav-aoi-subset copy      ROOT SUBSET_CSV [--dest DIR] [--mode copy|hardlink|move]
                          [--dry-run] [--include FILE_GLOB ...] [--extra-captures ...]

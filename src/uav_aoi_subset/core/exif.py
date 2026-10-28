@@ -160,6 +160,7 @@ class ExifToolReader:
                 str(self.executable),
                 "-json",
                 "-n",
+                "-q",  # no "N image files read" summary; errors are still reported
                 "-charset",
                 "filename=utf8",
                 *self.TAGS,
