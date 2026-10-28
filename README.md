@@ -9,7 +9,7 @@ separately in Pix4Dmapper.
 
 A free, open-source alternative to commercial GIS tools for this one job.
 
-> **Status:** work in progress. `index` works; `filter`, `copy` and `footprint` are not
+> **Status:** work in progress. `index` and `filter` work; `copy` and `footprint` are not
 > implemented yet. The command-line interface below is the target shape.
 
 ## Where it fits
@@ -59,6 +59,12 @@ uav-aoi-subset copy      ROOT SUBSET_CSV [--dest DIR] [--mode copy|hardlink|move
                          [--dry-run] [--include FILE_GLOB ...] [--extra-captures ...]
 uav-aoi-subset footprint INDEX_CSV [--out KML]
 ```
+
+`filter` reads every Polygon in the KML/KMZ (also inside folders and multi-geometries),
+combines them, and leaves out captures inside polygon holes. Points on the boundary count
+as inside. `--buffer 20` grows the area by 20 m (computed in the local UTM zone); a negative
+value shrinks it. The output has the same columns as the index CSV and is written next to
+the AOI file as `<AOI name>_image_index_YYYYMMDD.csv`.
 
 ## Development
 

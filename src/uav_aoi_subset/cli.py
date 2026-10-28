@@ -9,13 +9,17 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from uav_aoi_subset import __version__
+from uav_aoi_subset.core.aoi import AOIError, load_aoi
 from uav_aoi_subset.core.discovery import DEFAULT_PATTERN
 from uav_aoi_subset.core.exif import ExifToolError, ExifToolNotFoundError, ExifToolReader
+from uav_aoi_subset.core.filter import buffer_metres, default_subset_path, filter_records
 from uav_aoi_subset.core.index import (
     DEFAULT_BANDS,
+    IndexRecord,
     RecordNameCollisionError,
     build_index,
     default_index_path,
+    read_index_csv,
     write_index_csv,
 )
 
@@ -67,12 +71,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     p_filter = sub.add_parser("filter", help="Keep index rows that fall inside an AOI.")
-    p_filter.add_argument("index_csv", type=Path, metavar="INDEX_CSV")
     p_filter.add_argument(
-        "--aoi", type=Path, required=True, metavar="AREA", help="AOI polygon file (.kml/.kmz)."
+        "index_csv", type=Path, metavar="INDEX_CSV", help="Index CSV written by 'index'."
     )
-    p_filter.add_argument("--buffer", type=float, metavar="METRES", help="Buffer the AOI.")
-    p_filter.add_argument("--out", type=Path, metavar="CSV", help="Output CSV path.")
+    p_filter.add_argument(
+        "--aoi",
+        type=Path,
+        required=True,
+        metavar="AREA",
+        help="AOI polygon file (.kml/.kmz). Several polygons are combined; holes are honoured.",
+    )
+    p_filter.add_argument(
+        "--buffer",
+        type=float,
+        default=0.0,
+        metavar="METRES",
+        help="Grow the AOI by this many metres (negative shrinks it).",
+    )
+    p_filter.add_argument(
+        "--out",
+        type=Path,
+        metavar="CSV",
+        help="Output CSV path (default: next to the AOI, <AOI name>_image_index_YYYYMMDD.csv).",
+    )
 
     p_copy = sub.add_parser("copy", help="Copy the band files of a subset CSV.")
     p_copy.add_argument("root", type=Path, metavar="ROOT", help="Project root folder.")
@@ -131,6 +152,13 @@ def _list_some(title: str, lines: list[str]) -> None:
         print(f"  ... and {len(lines) - LIST_LIMIT} more (see the CSV)")
 
 
+def _with_missing_bands(record: IndexRecord) -> str:
+    # MATLAB index CSVs have no MissingBands column.
+    if not record.missing_bands:
+        return record.record_name
+    return f"{record.record_name}  [{';'.join(map(str, record.missing_bands))}]"
+
+
 def _run_index(args: argparse.Namespace) -> int:
     root: Path = args.root
     if not root.is_dir():
@@ -180,12 +208,58 @@ def _run_index(args: argparse.Namespace) -> int:
     print(f"  with GPS:         {len(records) - len(no_position)}")
     _list_some(
         "Incomplete captures (missing bands)",
-        [f"{r.record_name}  [{';'.join(map(str, r.missing_bands))}]" for r in incomplete],
+        [_with_missing_bands(r) for r in incomplete],
     )
     _list_some("Captures without a GPS position", [r.record_name for r in no_position])
     if reader.warnings:
         _list_some("ExifTool warnings", "\n".join(reader.warnings).splitlines())
     print(f"\nIndex written to: {out}")
+    return 0
+
+
+def _run_filter(args: argparse.Namespace) -> int:
+    index_csv: Path = args.index_csv
+    if not index_csv.is_file():
+        print(f"error: not a file: {index_csv}", file=sys.stderr)
+        return 1
+    out = args.out or default_subset_path(args.aoi)
+    if out.resolve() == index_csv.resolve():
+        print(f"error: the output would overwrite the input index: {out}", file=sys.stderr)
+        return 1
+    try:
+        records = read_index_csv(index_csv)
+        aoi = load_aoi(args.aoi)
+        area = buffer_metres(aoi.geometry, args.buffer)
+    except (AOIError, ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    result = filter_records(records, area)
+    write_index_csv(result.inside, out)
+
+    incomplete = [r for r in result.inside if not r.complete]
+    print(f"AOI:                {args.aoi}")
+    print(f"  polygons:         {aoi.polygon_count} ({aoi.hole_count} holes)")
+    if aoi.ignored_geometries:
+        print(f"  ignored:          {aoi.ignored_geometries} non-polygon geometries")
+    if args.buffer:
+        print(f"  buffer:           {args.buffer:g} m")
+    print(f"Captures in index:  {result.total}")
+    print(f"  without GPS:      {len(result.no_position)} (cannot be placed, left out)")
+    print(f"  inside the AOI:   {len(result.inside)}")
+    print(f"    incomplete:     {len(incomplete)}")
+    _list_some("AOI warnings", aoi.warnings)
+    _list_some(
+        "Incomplete captures inside the AOI (missing bands)",
+        [_with_missing_bands(r) for r in incomplete],
+    )
+    if not result.inside:
+        print(
+            "\nwarning: no capture lies inside the AOI. Check that the KML covers the flight "
+            "area, or try a --buffer.",
+            file=sys.stderr,
+        )
+    print(f"\nSubset written to: {out}")
     return 0
 
 
@@ -201,5 +275,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     if args.command == "index":
         return _run_index(args)
+    if args.command == "filter":
+        return _run_filter(args)
     print(f"uav-aoi-subset {args.command}: not implemented yet.", file=sys.stderr)
     return 2
