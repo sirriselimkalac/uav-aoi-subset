@@ -38,6 +38,7 @@ from uav_aoi_subset.core.discovery import (
     flat_folder_name,
     project_name,
 )
+from uav_aoi_subset.core.duplicates import drop_duplicates, find_duplicates
 from uav_aoi_subset.core.index import (
     CSV_ENCODING,
     DEFAULT_BANDS,
@@ -75,6 +76,7 @@ MISSING_BAND = "missing-band"
 ALREADY = "already-at-destination"
 NOT_FOUND = "not-found"
 AMBIGUOUS = "ambiguous"
+DUPLICATE = "skipped-duplicate"
 FAILED = "failed"
 ABORTED = "aborted"
 PENDING = {*WOULD.values(), WOULD_OVERWRITE}
@@ -137,6 +139,7 @@ class CopySummary:
     captures: int
     not_found: list[str]
     ambiguous: list[str]
+    duplicates: list[str]  # left out with skip_duplicates, "<record>: copy of <record>"
     incomplete: list[str]
     statuses: Counter
     groups_transferred: int
@@ -159,6 +162,8 @@ class CopyPlan:
     bytes_free: int
     warnings: list[str] = field(default_factory=list)
     subset_name: str = ""  # name of the subset CSV, recorded in the output marker
+    # Subset records that are the same capture in different folders (see core.duplicates).
+    duplicates: list[list[IndexRecord]] = field(default_factory=list)
 
     @property
     def enough_space(self) -> bool:
@@ -433,6 +438,7 @@ def plan_copy(
     extra_captures: Iterable[IndexRecord] = (),
     include: Iterable[str] = (),
     overwrite: bool = False,
+    skip_duplicates: bool = False,
     subset_name: str = "",
     progress: ProgressCallback = no_progress,
 ) -> CopyPlan:
@@ -441,7 +447,8 @@ def plan_copy(
     ``records`` are the subset rows; ``extra_captures`` are added on top (looked up without
     ``exclude``, since calibration-panel folders are usually excluded from the index).
     ``include`` globs (relative to ``root`` or absolute) select helper files that are copied
-    to the output root.
+    to the output root. With ``skip_duplicates``, only the first record of every group of
+    copies (:func:`~uav_aoi_subset.core.duplicates.find_duplicates`) is copied.
     """
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}")
@@ -452,6 +459,15 @@ def plan_copy(
     root, dest = Path(root), Path(dest).resolve()
     exclude = tuple(exclude)
     records, extra_captures = list(records), list(extra_captures)
+    duplicates = find_duplicates(records)
+    tasks: list[FileTask] = []
+    if skip_duplicates:
+        selected, dropped = drop_duplicates(records)
+        for record, original in dropped:
+            message = f"copy of {original.record_name}"
+            tasks.append(FileTask(CAPTURE, record.record_name, DUPLICATE, message=message))
+    else:
+        selected = records
     warnings = _check_dest(root, dest)
     regex = re.compile(pattern, re.IGNORECASE)
 
@@ -467,7 +483,7 @@ def plan_copy(
     # Match every record once: (kind, name, folder parts, image base, matching captures).
     wanted = []
     seen: set[str] = set()
-    for kind, rows, finder in ((CAPTURE, records, lookup), (EXTRA, extra_captures, extra_lookup)):
+    for kind, rows, finder in ((CAPTURE, selected, lookup), (EXTRA, extra_captures, extra_lookup)):
         for record in rows:
             parts, base, matches = finder.find(record)
             if len(matches) == 1:
@@ -484,7 +500,6 @@ def plan_copy(
     flat = assign_flat_folders(parts for _, _, parts, _, _ in wanted if parts is not None)
     dest_device = _existing_ancestor(dest).stat().st_dev
     listing = _DestListing(regex)
-    tasks: list[FileTask] = []
     for i, (kind, name, parts, base, matches) in enumerate(wanted):
         progress("plan", i, len(wanted))
         if len(matches) > 1:
@@ -556,6 +571,7 @@ def plan_copy(
         bytes_free=free,
         warnings=warnings,
         subset_name=subset_name,
+        duplicates=duplicates,
     )
 
 
@@ -696,7 +712,11 @@ def summarize(plan: CopyPlan) -> CopySummary:
             by_capture.setdefault((t.kind, t.record_name), []).append(t)
     not_found = [n for (_, n), ts in by_capture.items() if ts[0].status == NOT_FOUND]
     ambiguous = [n for (_, n), ts in by_capture.items() if ts[0].status == AMBIGUOUS]
-    groups = [ts for ts in by_capture.values() if ts[0].status not in {NOT_FOUND, AMBIGUOUS}]
+    duplicates = [
+        f"{n}: {ts[0].message}" for (_, n), ts in by_capture.items() if ts[0].status == DUPLICATE
+    ]
+    left_out = {NOT_FOUND, AMBIGUOUS, DUPLICATE}
+    groups = [ts for ts in by_capture.values() if ts[0].status not in left_out]
     moving = PENDING | TRANSFERRED
     files = [t for t in plan.tasks if t.source is not None]
     return CopySummary(
@@ -705,6 +725,7 @@ def summarize(plan: CopyPlan) -> CopySummary:
         captures=len(groups),
         not_found=not_found,
         ambiguous=ambiguous,
+        duplicates=duplicates,
         incomplete=[
             ts[0].record_name for ts in groups if any(t.status == MISSING_BAND for t in ts)
         ],

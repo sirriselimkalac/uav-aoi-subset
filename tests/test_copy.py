@@ -2,6 +2,7 @@ import csv
 import errno
 import re
 from collections import namedtuple
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -622,3 +623,46 @@ def test_mode_validation(tree, tmp_path):
         plan_copy(tree, [], tmp_path / "out", mode="symlink")
     with pytest.raises(ValueError, match="bands"):
         plan_copy(tree, [], tmp_path / "out", bands=0)
+
+
+# --- duplicates ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def duplicated(tmp_path):
+    """The same capture in its flight folder and in an old subset folder inside ROOT."""
+    root = tmp_path / "Kampanya"
+    write_capture(root / "Part1" / "000", "IMG_0001", range(1, 8))
+    write_capture(root / "Part1" / "000", "IMG_0002", range(1, 8))
+    write_capture(root / "old_subset" / "Part1_000", "IMG_0001", range(1, 8))
+    same = {"capture_time": "2026:07:30 09:00:00", "latitude": 50.0, "longitude": 10.0}
+    records = [replace(r, **same) for r in records_for(root)]
+    records[1] = replace(records[1], latitude=50.001)  # Part1/000/IMG_0002, another place
+    return root, records
+
+
+def test_duplicates_are_copied_and_reported_by_default(duplicated, tmp_path):
+    root, records = duplicated
+    plan = run(root, records, tmp_path / "out")
+    assert [[r.relative_folder for r in g] for g in plan.duplicates] == [
+        ["old_subset/Part1_000", "Part1/000"]
+    ]
+    assert statuses(plan)["copied"] == 21
+    assert plan.summary().duplicates == []
+
+
+def test_skip_duplicates_copies_only_the_first_folder(duplicated, tmp_path):
+    root, records = duplicated
+    plan = run(root, records, tmp_path / "out", skip_duplicates=True)
+    st = statuses(plan)
+    assert st["copied"] == 14
+    assert st["skipped-duplicate"] == 1
+    assert plan.summary().duplicates == [
+        "Part1_000_IMG_0001: copy of old_subset_Part1_000_IMG_0001"
+    ]
+    assert plan.summary().captures == 2
+    assert not any(n.startswith("Part1_000_IMG_0001") for n in files_under(tmp_path / "out"))
+
+    report = tmp_path / "report.csv"
+    write_copy_report(plan.tasks, report)
+    assert "skipped-duplicate" in report.read_text(encoding=CSV_ENCODING)

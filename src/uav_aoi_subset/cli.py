@@ -28,6 +28,7 @@ from uav_aoi_subset.core.copy import (
     write_copy_report,
 )
 from uav_aoi_subset.core.discovery import DEFAULT_PATTERN
+from uav_aoi_subset.core.duplicates import can_detect, drop_duplicates, find_duplicates
 from uav_aoi_subset.core.exif import (
     ExifToolError,
     ExifToolNotFoundError,
@@ -58,6 +59,12 @@ from uav_aoi_subset.core.kml import write_kml
 
 # How many incomplete captures / missing positions to list in the summary.
 LIST_LIMIT = 20
+
+SKIP_DUPLICATES_HELP = (
+    "Copies of the same capture in several folders (same image, capture time and position, "
+    "e.g. an old subset folder inside ROOT): keep only the first, by folder name, and list the "
+    "others. Without this option all copies are kept and a warning lists them."
+)
 
 ISSUES_URL = "https://github.com/sirriselimkalac/uav-aoi-subset/issues"
 
@@ -224,6 +231,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="CSV",
         help="Output CSV path (default: next to the AOI, <AOI name>_image_index_YYYYMMDD.csv).",
     )
+    p_filter.add_argument("--skip-duplicates", action="store_true", help=SKIP_DUPLICATES_HELP)
 
     p_copy = sub.add_parser(
         "copy",
@@ -325,6 +333,7 @@ def build_parser() -> argparse.ArgumentParser:
         "record names, text files with one name per line, or an index CSV. Found even in "
         "--exclude'd folders.",
     )
+    p_copy.add_argument("--skip-duplicates", action="store_true", help=SKIP_DUPLICATES_HELP)
 
     p_footprint = sub.add_parser(
         "footprint",
@@ -393,6 +402,24 @@ def _list_some(title: str, lines: list[str]) -> None:
         print(f"  {line}")
     if len(lines) > LIST_LIMIT:
         print(f"  ... and {len(lines) - LIST_LIMIT} more (see the CSV)")
+
+
+def _duplicate_line(group: list[IndexRecord]) -> str:
+    folders = ", ".join(r.relative_folder or "." for r in group)
+    return f"{group[0].image_base} ({group[0].capture_time}) in: {folders}"
+
+
+def _list_duplicates(groups: list[list[IndexRecord]], hint: str) -> None:
+    _list_some(
+        "Captures found in more than one folder (same image, capture time and position)",
+        [_duplicate_line(g) for g in groups],
+    )
+    if groups:
+        print(f"  {hint}")
+
+
+def _copies(groups: list[list[IndexRecord]]) -> int:
+    return sum(len(g) - 1 for g in groups)
 
 
 def _with_missing_bands(record: IndexRecord) -> str:
@@ -503,11 +530,19 @@ def _run_index(args: argparse.Namespace) -> int:
     print(f"  complete:         {len(records) - len(incomplete)} (all {args.bands} bands)")
     print(f"  incomplete:       {len(incomplete)}")
     print(f"  with GPS:         {len(records) - len(no_position)}")
+    duplicates = find_duplicates(records)
+    if duplicates:
+        print(f"  extra copies:     {_copies(duplicates)} (same capture in another folder)")
     _list_some(
         "Incomplete captures (missing bands)",
         [_with_missing_bands(r) for r in incomplete],
     )
     _list_some("Captures without a GPS position", [r.record_name for r in no_position])
+    _list_duplicates(
+        duplicates,
+        "Leave the copies out with --exclude <their folder>, or with --skip-duplicates in "
+        "'filter' or 'copy'.",
+    )
     _list_some("Folders not scanned", not_scanned)
     if reader.warnings:
         _list_some("ExifTool warnings", "\n".join(reader.warnings).splitlines())
@@ -542,12 +577,14 @@ def _run_filter(args: argparse.Namespace) -> int:
         return _error(str(exc), "Use a smaller negative --buffer, or none.")
 
     result = filter_records(records, area)
+    duplicates = find_duplicates(result.inside)
+    inside = drop_duplicates(result.inside)[0] if args.skip_duplicates else result.inside
     try:
-        write_index_csv(result.inside, out)
+        write_index_csv(inside, out)
     except OSError as exc:
         return _cannot_write(out, exc)
 
-    incomplete = [r for r in result.inside if not r.complete]
+    incomplete = [r for r in inside if not r.complete]
     print(f"AOI:                {args.aoi}")
     print(f"  polygons:         {aoi.polygon_count} ({aoi.hole_count} holes)")
     if aoi.ignored_geometries:
@@ -557,12 +594,27 @@ def _run_filter(args: argparse.Namespace) -> int:
     print(f"Captures in index:  {result.total}")
     print(f"  without GPS:      {len(result.no_position)} (cannot be placed, left out)")
     print(f"  inside the AOI:   {len(result.inside)}")
+    if duplicates:
+        what = "left out" if args.skip_duplicates else "kept"
+        print(f"    extra copies:   {_copies(duplicates)} ({what})")
     print(f"    incomplete:     {len(incomplete)}")
     _list_some("AOI warnings", aoi.warnings)
     _list_some(
         "Incomplete captures inside the AOI (missing bands)",
         [_with_missing_bands(r) for r in incomplete],
     )
+    _list_duplicates(
+        duplicates,
+        "Only the first folder of each is in the subset."
+        if args.skip_duplicates
+        else "All copies are in the subset; add --skip-duplicates to keep only the first.",
+    )
+    if args.skip_duplicates and not can_detect(records):
+        print(
+            "\nwarning: this CSV has no capture times (ImageBase/CaptureTime columns), so "
+            "copies cannot be recognised; --skip-duplicates had no effect.",
+            file=sys.stderr,
+        )
     if not result.inside:
         print(
             "\nwarning: no capture lies inside the AOI. Check that the KML covers the flight "
@@ -601,6 +653,8 @@ def _print_copy_summary(plan: CopyPlan, dry_run: bool) -> None:
     print(f"  not found:        {len(s.not_found)}")
     if s.ambiguous:
         print(f"  ambiguous:        {len(s.ambiguous)}")
+    if s.duplicates:
+        print(f"  extra copies:     {len(s.duplicates)} (left out, see below)")
     print(f"  incomplete:       {len(s.incomplete)} (the bands that exist are included)")
     print(f"Captures {verb}:".ljust(20) + f"{s.groups_transferred}")
     print(f"  already complete: {s.groups_skipped}")
@@ -627,6 +681,12 @@ def _print_copy_summary(plan: CopyPlan, dry_run: bool) -> None:
         "RelativeFolder/ImageBase)",
         s.ambiguous,
     )
+    _list_some("Extra copies left out (--skip-duplicates)", s.duplicates)
+    if plan.duplicates and not s.duplicates:
+        _list_duplicates(
+            plan.duplicates,
+            "All copies are included; add --skip-duplicates to copy only the first.",
+        )
     _list_some("Incomplete captures", s.incomplete)
     _list_some(
         "Conflicts",
@@ -668,6 +728,7 @@ def _run_copy(args: argparse.Namespace) -> int:
             extra_captures=extras,
             include=args.include,
             overwrite=args.overwrite,
+            skip_duplicates=args.skip_duplicates,
             subset_name=args.subset_csv.name,
             progress=progress,
         )
@@ -690,6 +751,12 @@ def _run_copy(args: argparse.Namespace) -> int:
     )
     for warning in plan.warnings:
         print(f"warning: {warning}", file=sys.stderr)
+    if args.skip_duplicates and not can_detect(records):
+        print(
+            "warning: SUBSET_CSV has no capture times (ImageBase/CaptureTime columns), so copies "
+            "cannot be recognised; --skip-duplicates has no effect",
+            file=sys.stderr,
+        )
 
     if not plan.enough_space:
         _print_copy_summary(plan, dry_run=True)

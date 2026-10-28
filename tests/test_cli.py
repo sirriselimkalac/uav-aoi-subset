@@ -1,5 +1,6 @@
 import subprocess
 import sys
+from dataclasses import replace
 
 import pytest
 from synthetic import (
@@ -119,6 +120,19 @@ def test_index_lists_folders_not_scanned(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "Folders not scanned:" in out
     assert "linked folder not followed: a/loop" in out
+
+
+@pytest.mark.requires_exiftool
+def test_index_reports_duplicate_captures(tmp_path, capsys):
+    for folder in ("Part1/000", "old_subset/Part1_000"):
+        (band1,) = write_capture(tmp_path / folder, "IMG_0001", [1])
+        write_gps(band1, 39.9, 32.8)  # same position and capture time
+    write_capture(tmp_path / "Part1/000", "IMG_0002", [1])  # no GPS: never a duplicate
+    assert main(["index", str(tmp_path), "--bands", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "extra copies:     1 (same capture in another folder)" in out
+    assert "IMG_0001 (2026:07:30 09:00:00) in: old_subset/Part1_000, Part1/000" in out
+    assert "--skip-duplicates" in out
 
 
 @pytest.mark.requires_exiftool
@@ -612,3 +626,67 @@ def test_every_error_says_what_to_do_next(tmp_path, capsys):
         lines = err.splitlines()
         assert lines[0].startswith("error: "), argv
         assert len(lines) >= 2 and lines[1].startswith("  "), argv
+
+
+def test_filter_skip_duplicates(filter_inputs, tmp_path, capsys):
+    index_csv, aoi = filter_inputs
+    timed = [replace(r, capture_time="2026:07:30 09:00:00") for r in FILTER_RECORDS]
+    copy = replace(timed[0], record_name="old_P_IMG_0000", relative_folder="old")
+    write_index_csv([*timed, copy], index_csv)
+
+    out = tmp_path / "all.csv"
+    assert main(["filter", str(index_csv), "--aoi", str(aoi), "--out", str(out)]) == 0
+    text = capsys.readouterr().out
+    assert "extra copies:   1 (kept)" in text
+    assert "0000 (2026:07:30 09:00:00) in: old, Part1/0000SET/000" in text  # base "0000"
+    assert len(read_index_csv(out)) == 3
+
+    args = ["filter", str(index_csv), "--aoi", str(aoi), "--out", str(out), "--skip-duplicates"]
+    assert main(args) == 0
+    assert "extra copies:   1 (left out)" in capsys.readouterr().out
+    # The first folder in case-insensitive order is kept.
+    assert [r.record_name for r in read_index_csv(out)] == ["P_IMG_0002", "old_P_IMG_0000"]
+
+
+def test_filter_skip_duplicates_without_capture_times(filter_inputs, tmp_path, capsys):
+    index_csv, aoi = filter_inputs
+    out = tmp_path / "x.csv"
+    assert (
+        main(["filter", str(index_csv), "--aoi", str(aoi), "--out", str(out), "--skip-duplicates"])
+        == 0
+    )
+    assert "copies cannot be recognised" in capsys.readouterr().err
+
+
+def test_copy_skip_duplicates(tmp_path, capsys):
+    root = tmp_path / "Kampanya"
+    for folder in ("Part1/000", "old/Part1_000"):
+        write_capture(root / folder, "IMG_0001", range(1, 8))
+    records = [
+        IndexRecord(
+            record_name=c.record_name,
+            complete=True,
+            latitude=50.0,
+            longitude=10.0,
+            altitude=None,
+            capture_time="2026:07:30 09:00:00",
+            bands_found=c.bands_found,
+            missing_bands=(),
+            relative_folder=c.relative_folder,
+            image_base=c.base,
+        )
+        for c in discover_captures(root)
+    ]
+    subset = tmp_path / "subset.csv"
+    write_index_csv(records, subset)
+
+    assert main(["copy", str(root), str(subset), "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "Files to copy:      14" in out
+    assert "IMG_0001 (2026:07:30 09:00:00) in: old/Part1_000, Part1/000" in out
+
+    assert main(["copy", str(root), str(subset), "--dry-run", "--skip-duplicates"]) == 0
+    out = capsys.readouterr().out
+    assert "Files to copy:      7" in out
+    assert "extra copies:     1 (left out, see below)" in out
+    assert "Part1_000_IMG_0001: copy of old_Part1_000_IMG_0001" in out
