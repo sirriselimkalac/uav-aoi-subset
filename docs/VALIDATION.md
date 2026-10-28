@@ -71,7 +71,8 @@ git config user.email "260359645+sirriselimkalac@users.noreply.github.com"
 git log -1 --format="%h %an <%ae>"
 ```
 
-Download the dataset, extract it to `$Data`, then:
+Download the dataset (note the size of the ZIP file for the results table; the README says
+"about 19 GB"), extract it to `$Data`, then:
 
 ```powershell
 (Get-ChildItem $Data -Recurse -Include *.tif,*.tiff -File).Count     # expect 3360
@@ -85,6 +86,7 @@ Get-ChildItem $Data -Recurse -Directory | Select-Object FullName      # note the
 | V1 | `cd $Repo; uv sync --locked; uv run pytest` | all pass, **0 skipped** (ExifTool found) |
 | V2 | `git rev-parse --short HEAD` | write the commit hash into the results table |
 | V3 | `Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem -Name LongPathsEnabled` | note the value (0 or 1); it matters for V41 |
+| V4 | `aoi --version` | three lines: program version, Python version and Windows version, `ExifTool <version> at <path>`; copy Python and ExifTool into the results table header |
 
 ## 3. index
 
@@ -97,7 +99,7 @@ Measure-Command { aoi index $Data --out "$Res\ours_index.csv" | Out-Default }
 | V10 | Summary | 480 captures, all complete, 480 with GPS, no ExifTool warnings. Write down the time. |
 | V11 | Open `ours_index.csv` in Excel (double-click) | Note whether the columns split correctly. With a Turkish locale Excel may expect `;`. Turkish characters must display correctly. |
 | V12 | Turkish path: `Copy-Item -Recurse $Data "$Demo\data\Saha Fotoğrafları – deneme"`, then `aoi index "$Demo\data\Saha Fotoğrafları – deneme" --out "$Res\tr_index.csv"` | same numbers as V10 |
-| V13 | ExifTool not on PATH: `aoi index $Data --out "$Res\x.csv" --exiftool "<full path to exiftool.exe>"` with a PATH without ExifTool (`$env:Path = ($env:Path -split ';' \| ? { $_ -notmatch 'exiftool' }) -join ';'`) | works with `--exiftool`; without it, a clear "ExifTool was not found" error. Open a new window afterwards. |
+| V13 | ExifTool not on PATH: `aoi index $Data --out "$Res\x.csv" --exiftool "<full path to exiftool.exe>"` with a PATH without ExifTool (`$env:Path = ($env:Path -split ';' \| ? { $_ -notmatch 'exiftool' }) -join ';'`) | works with `--exiftool`; without it, a clear "ExifTool was not found on PATH" error that lists only the **Windows** install steps (installer, or rename `exiftool(-k).exe`), exit code 1, no traceback. Open a new window afterwards. |
 | V14 | If the dataset contains calibration-panel captures in their own folder: `aoi index $Data --exclude "<panel folder>" --out "$Res\nopanel.csv"` | panel captures left out |
 
 ## 4. footprint
@@ -195,7 +197,7 @@ aoi copy $Data $North.FullName --dry-run
 | V32 | MATLAB keeps one folder per source folder, so compare with that layout: `aoi copy $Data $North.FullName --layout folders --dest "$Res\ours_copy_folders"`, then `uv run python scripts\compare_outputs.py tree "$Res\ours_copy_folders" "$Res\matlab_copy_north"` | only differences are our extra report/include files, if any |
 | V33 | Resume: `aoi copy $Data $North.FullName --include '**/*.csv' --dest $Dest` | everything skipped, exit code 0 (`$LASTEXITCODE`), takes seconds |
 | V33a | New run without `--dest`: `aoi copy $Data $North.FullName --dry-run` | output folder is `blueberry_subset_02`; `$Dest` untouched. `Get-Content "$Dest\.uav-aoi-subset-output"` names the subset CSV |
-| V34 | Interrupt: `aoi copy $Data "$Res\ours_index.csv" --dest "$Res\full_copy" --layout folders` (folders layout because V35 and V39 reuse this tree), press Ctrl+C after a few seconds, then run it again | no `*.uas-partial` files left (`Get-ChildItem "$Res\full_copy" -Recurse -Filter *.uas-partial`); the second run completes; 3,360 files in total |
+| V34 | Interrupt: `aoi copy $Data "$Res\ours_index.csv" --dest "$Res\full_copy" --layout folders` (folders layout because V35 and V39 reuse this tree), press Ctrl+C after a few seconds, then run it again | "Interrupted." and a resume hint naming `--dest`, `$LASTEXITCODE` = 130, no traceback; a `full_copy_copy_report_*.csv` of the files done so far; no `*.uas-partial` files left (`Get-ChildItem "$Res\full_copy" -Recurse -Filter *.uas-partial`); the second run completes; 3,360 files in total |
 | V35 | Conflict: `Set-Content "$Res\full_copy\<some folder>\IMG_0001_3.tif" "x"`, run again | exit code 1, the file is listed under *Conflicts* and left as it is; with `--overwrite` it is replaced |
 | V36 | Report: open the newest `*_copy_report_*.csv` in Excel | one row per file; statuses are plausible |
 | V37 | Hard links (same NTFS drive): `aoi copy $Data $North.FullName --mode hardlink --dest "$Demo\data\linked_north"` | "Space needed: 0 bytes"; `fsutil hardlink list "<a linked file>"` shows two paths |
@@ -217,11 +219,24 @@ aoi copy $Data $North.FullName --dry-run
 | V51 | Map view | camera positions lie inside the AOI |
 | V52 | Optional: run step 1 (Initial Processing) | completes; calibration panel detected if included (V42) |
 
-## 8c. File pickers *(milestone 6)*
+## 8c. Pickers, progress and errors *(milestone 6)*
+
+Pickers open only when a required path is missing **and** the command runs interactively
+(PowerShell window, stdin not redirected). Close any Excel window holding a result CSV first,
+except in V69.
 
 | ID | Check | Expected |
 |---|---|---|
-| V60 | `aoi index` with no ROOT, `aoi filter` with no files, `aoi copy` with no arguments | folder/file pickers open; the result is the same as with arguments |
+| V60 | `aoi index --out "$Res\picker_index.csv"` (no ROOT), choose `$Data` | folder picker opens **in front of** PowerShell, text sharp (not blurry) on a high-DPI / scaled display; then `Equivalent command: uav-aoi-subset index "C:\uav-demo\data\blueberry" --out ...`; same numbers as V10 |
+| V61 | `aoi filter` (no arguments): choose `$Res\ours_index.csv`, then `$Aoi\blueberry_aoi_north.kml` | CSV picker first; the AOI picker opens in `$Res` (the CSV's folder); same captures inside as V21 |
+| V62 | `aoi copy --dry-run` (no arguments): choose `$Data`, then the north subset CSV | folder picker first, then the CSV picker opens in `$Data`; same summary as V30 |
+| V63 | `aoi footprint`, press *Cancel* | "Cancelled: no file selected; nothing was done.", `$LASTEXITCODE` = 1 |
+| V64 | `aoi index --no-picker`; then `$env:UAV_AOI_SUBSET_NO_PICKER = "1"; aoi index; Remove-Item Env:UAV_AOI_SUBSET_NO_PICKER`; then `$null \| uv run --project $Repo uav-aoi-subset index` (stdin redirected; the `aoi` function would not pass the pipe on) | no window in any of the three; usage error "the following arguments are required: ROOT", `$LASTEXITCODE` = 2 |
+| V65 | Rename the subset CSV written in V61 to `picked.csv`, then paste the *Equivalent command* line printed in V61 (replace `uav-aoi-subset` with `aoi`) and run it | no picker opens; `uv run python scripts\compare_outputs.py csv <new CSV> <picked.csv>` reports no differences |
+| V66 | `aoi index $Data --out "$Res\bar.csv"` in a normal PowerShell window; also once in a narrow window (about 60 columns) | one bar that updates in place with count, percentage and ETA (Scanning, then Reading GPS); no wrapped or repeated lines, no stray characters |
+| V67 | `aoi index $Data --out "$Res\log_index.csv" 2> "$Res\progress_log.txt"`, then `Get-Content "$Res\progress_log.txt"` | plain lines: `Reading GPS: started`, then one line per 10 % (`Reading GPS: 30% (…/480), 0:00:… elapsed`), no `\r` garbage |
+| V68 | `aoi index $Data --out "$Res\x.csv"`, press Ctrl+C during "Reading GPS" | "Interrupted.", `$LASTEXITCODE` = 130, no traceback |
+| V69 | Open `$Res\fp_subset.csv` in Excel, then run the V20e command again (same `--out`) | "cannot write …: permission denied" with the hint to close the file or use `--out`; exit 1, no traceback. Close Excel afterwards. |
 
 ## 9. Finish and clean up (only when every check has passed)
 
@@ -256,11 +271,13 @@ aoi copy $Data $North.FullName --dry-run
 ## 10. Results
 
 Commit tested: `_______`  Date: `__________`  Windows version: `______`  Python: `____`
-ExifTool: `_____`  LongPathsEnabled: `_`  Dataset folder layout: `________________________`
+ExifTool: `_____`  LongPathsEnabled: `_`  Dataset ZIP size: `_____`
+Dataset folder layout: `________________________`
 
 | ID | Result (pass / fail / n.a.) | Numbers / notes |
 |---|---|---|
 | V1 | | |
+| V4 | | |
 | V10 | | captures / complete / with GPS / time |
 | V11 | | Excel column split? |
 | V12 | | |
@@ -302,7 +319,16 @@ ExifTool: `_____`  LongPathsEnabled: `_`  Dataset folder layout: `______________
 | V50 | | image count; flat layout OK in Pix4D? |
 | V51 | | |
 | V52 | | |
-| V60 | | |
+| V60 | | sharp on high DPI? in front? |
+| V61 | | |
+| V62 | | |
+| V63 | | |
+| V64 | | |
+| V65 | | |
+| V66 | | |
+| V67 | | |
+| V68 | | |
+| V69 | | |
 
 Findings to fix on the Mac:
 

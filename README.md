@@ -103,8 +103,8 @@ Other cameras, firmware versions or processing software may still behave in ways
 not foresee: different file naming or folder layouts, missing or unusual GPS tags, or
 import problems in your software. If you run into such a problem, please
 [open an issue](https://github.com/sirriselimkalac/uav-aoi-subset/issues) and include the
-camera and software (with versions), the command you ran and its output. No imagery is
-needed. We will do our best to fix it.
+camera and software (with versions), the command you ran and its output, and the output of
+`uav-aoi-subset --version`. No imagery is needed. We will do our best to fix it.
 
 Product names are trademarks of their respective owners and are mentioned only to describe
 the test setup; this project is not affiliated with or endorsed by them.
@@ -136,7 +136,55 @@ uav-aoi-subset copy      ROOT SUBSET_CSV [--dest DIR] [--mode copy|hardlink|move
                          [--extra-captures ...]
 uav-aoi-subset footprint INDEX_CSV [--out KML] [--hull convex|concave] [--ratio R]
                          [--buffer METRES] [--per-folder [DEPTH]] [--overwrite]
+uav-aoi-subset --version
 ```
+
+Every command also accepts `--no-picker` and `--debug` (see below). `uav-aoi-subset COMMAND
+--help` lists all options.
+
+### File and folder pickers
+
+Leave out a required path and a file or folder picker asks for it, for example
+`uav-aoi-subset filter` with no arguments. The pickers ask in a fixed order: `filter` asks for
+the index CSV and then the AOI file, `copy` for ROOT and then the subset CSV. Each picker
+opens in the folder of the path before it. Only the missing paths are asked for. Cancelling a
+picker stops the command (exit code 1) without doing anything.
+
+After the pickers, the tool prints the equivalent command line, for example:
+
+```
+Equivalent command: uav-aoi-subset filter "D:\survey\survey_image_index_20261028.csv" --aoi "D:\aoi\north.kml"
+```
+
+Copy it to repeat the run, or to use it in a script.
+
+Pickers open only when you run the tool yourself in a terminal: they need a display, and
+standard input must be a terminal. They never open when the tool runs from a script with
+redirected input, from a scheduler or on a server without a display. In those cases a missing
+path is a usage error (exit code 2), as in any command-line tool. To switch pickers off
+completely, add `--no-picker` or set the environment variable `UAV_AOI_SUBSET_NO_PICKER=1`.
+
+### Progress and errors
+
+Long steps (scanning folders, reading GPS tags, copying) show a progress bar with the count,
+the percentage and the estimated time left. When the output is redirected to a file, the
+tool writes one line per 10 % instead, so logs stay readable.
+
+Every error message says what to do next. Ctrl+C stops the tool cleanly; an interrupted
+`copy` removes unfinished files and tells you how to resume. If something unexpected goes
+wrong, the tool prints a short message; run the same command again with `--debug` to see the
+full details, and please [report it](https://github.com/sirriselimkalac/uav-aoi-subset/issues).
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | success |
+| 1 | error (the message says what to do next), or a picker was cancelled |
+| 2 | usage error: a required argument is missing or an option is invalid |
+| 130 | interrupted with Ctrl+C |
+
+### Filter details
 
 `filter` reads every Polygon in the KML/KMZ (also inside folders and multi-geometries),
 combines them, and leaves out captures inside polygon holes. Points on the boundary count
