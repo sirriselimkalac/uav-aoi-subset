@@ -25,6 +25,8 @@ from the real campaign data of Phases 4–5.
 | `examples/blueberry_aoi_blocks.kml` | two polygons, one with a hole |
 | `examples/blueberry_aoi_north.kmz` | the same as the first one, as KMZ |
 | `examples/blueberry_footprint.kml` | output of `footprint` for the whole dataset (V20) |
+| `examples/blueberry_aoi_cross_all.kml` | a band across the flight lines that crosses all four set folders of the layered copy (V77) |
+| `examples/blueberry_aoi_cross_two.kml` | a shorter band across the border of two set folders only (V77) |
 | `examples/README.md` | one line per file: what it shows and the capture count it gives with `filter` |
 
 Before you commit them, open each KML in Notepad and check:
@@ -32,7 +34,7 @@ Before you commit them, open each KML in Notepad and check:
 - [ ] Only the AOI placemarks are in it. Nothing from *My Places*, and no other locations.
 - [ ] Names are neutral English, like `North block`. No personal or company names, no file paths.
 - [ ] All coordinates lie over the public blueberry field.
-- [ ] Each file loads with `aoi filter` (V21–V23 in VALIDATION.md).
+- [ ] Each file loads with `aoi filter` (V21–V23 and V77a in VALIDATION.md).
 
 ### A2. Screenshots: `docs/images/`
 
@@ -59,6 +61,9 @@ General rules:
 | `08_copy_report.png` | the copy report CSV opened in Excel (a few rows) |
 | `09_pix4d_import.png` | Pix4Dmapper: the subset images loaded / the camera positions on the map |
 | `10_pickers.png` | *(milestone 6)* a file/folder picker opened by a command run without arguments |
+| `11_layered_footprint.png` | Google Earth Pro: the four-strip `--per-folder 1` footprint of the layered copy (V76a) with the two cross AOIs |
+| `12_verify.png` | terminal: `make_layered_dataset.py verify` printing `RESULT: SAME` (V77d) |
+| `13_layered_output_folder.png` | Explorer: the flat output of `copy` from the layered copy, with files such as `0000SET_000_IMG_0000_1.tif` and `0001SET_000_IMG_0000_1.tif` side by side (V77b) |
 
 ### A3. Facts for the README
 
@@ -67,10 +72,13 @@ assets.
 
 - [ ] Dataset citation: exact title, publisher/authors, year, landing-page URL, DOI if any,
       **licence**. Copy them from the download page.
-- [ ] Dataset folder layout (folder levels, as a short tree, without the work path).
+- [ ] Dataset folder layout: one folder, 3,361 files (known; confirm in 2.1).
 - [ ] The exact commands used for the worked example, as run.
 - [ ] Counts: captures in the index, captures inside each example AOI, files copied, size.
-- [ ] Timings: `index` (ours and MATLAB), `copy`, the resume run.
+- [ ] Timings: `index` (ours and MATLAB), `copy`, the resume run, `make_layered_dataset.py build`
+  (hard links) and `index` of the layered copy.
+- [ ] Layered copy: the commands of the README walk-through as run, counts per set folder for
+  both cross AOIs, and anything in that README section that was unclear (V74).
 - [ ] Windows notes found during validation: ExifTool install, long paths, Excel and CSV
       separators, antivirus slow-downs.
 - [ ] Known limitations to state in the README.
@@ -88,6 +96,8 @@ assets.
    - command reference for `index`, `filter`, `copy` and `footprint`;
    - safety notes (`--dry-run`, resume, `--confirm-move`, the marker file), limitations;
    - how to cite the dataset, licence.
+   - Check the *Optional: a layered copy of the example data* section against the V74 notes and
+     add the screenshots 11–13 and the cross AOIs there.
    - Remove the "work in progress" status note.
    - Keep the "Positional accuracy" section; add measured numbers only if the user gives them.
    - Never fill in the `<!-- AUTHOR: ... -->` blocks: ask the user to write them (why the tool

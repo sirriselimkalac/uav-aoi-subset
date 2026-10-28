@@ -160,6 +160,8 @@ Done: **1 scaffold**, **2 index** (CI green on ubuntu/macOS/windows × Python 3.
 **pre-validation hardening** (system/unreadable folders, links, drive roots, duplicate captures,
 scan benchmark; Windows README; bug report form; five-phase VALIDATION.md; CI green on all
 6 jobs, 249 tests).
+**one-folder example data + layered-copy helper** (`examples/make_layered_dataset.py`, README
+section, VALIDATION Phase 3B; CI green on all 6 jobs, 276 tests).
 Package version is `0.0.1` until the v0.1.0 tag (milestone 8). Repo is private until then.
 
 Decisions made so far:
@@ -281,7 +283,7 @@ Decisions made so far:
 Validation prep is in place: `docs/VALIDATION.md` (work-computer checklist in five phases:
 Phase 1 = P1–P7 + snag log, README only; Phase 2 = blueberry V1–V69 (footprint V20–V20g,
 Pix4D flat layout V50, `--version` V4, pickers / progress / Ctrl+C / permission V60–V69);
-Phase 3 = unusual KMLs V70–V73; Phase 4 = real campaign V80–V87, privacy rules first; Phase 5 =
+Phase 3 = unusual KMLs V70–V72 (V73 n.a.) + layered copy V74–V79; Phase 4 = real campaign V80–V87, privacy rules first; Phase 5 =
 ROOT too high V90–V93; results tables per phase with an issue column), `docs/RELEASE.md`
 (README asset list + public gate), `.github/ISSUE_TEMPLATE/bug_report.yml` (issue form with
 privacy warning and checkbox; blank issues disabled), `scripts/compare_outputs.py`,
@@ -289,6 +291,33 @@ privacy warning and checkbox; blank issues disabled), `scripts/compare_outputs.p
 README *Installation* is written for an ordinary Windows user (uv/ExifTool without admin or
 scripts, `exiftool(-k).exe` rename, `--exiftool`, user PATH, new window, ZIP without Git,
 troubleshooting table). Not yet run on real data.
+
+Example data and the layered copy (decided 2026-10-28):
+- The blueberry dataset is published as **one folder** (`altum-pt-blueberries-60m-sample-data`):
+  3,361 files (3,360 TIFFs + panel CSV), no sub-folders; ZIP 20,822,285,409 B, extracted
+  27,278,926,830 B. Its page states no licence: we only link to it, never redistribute.
+  Phase 2 expectations are written for one folder (V14/V42 n.a., V20d one `(root)` polygon,
+  no renaming in V31, V50 only flat import).
+- `examples/make_layered_dataset.py` is a **public helper script, not part of the package**
+  (no console script; `uv run python examples/make_layered_dataset.py build|verify`). The README
+  (*Example dataset → Optional: a layered copy of the example data*) explains it; using it is
+  optional, the tool works with flat data. Stdlib + `core` + `console.ConsoleProgress`; no brands.
+  `build`: top-level files of INPUT only (sub-folders ignored with a warning, files written by
+  this tool skipped), captures sorted by the trailing number of `base`, `--parts` (4) consecutive
+  groups → `{g:04d}SET/{n:03d}` (`--folder-captures` 200 per sub-folder), numbering restarts per
+  SET with one digit width for all; other files → `0000SET/000`; `--add-duplicate [GROUP]`
+  (default 2, 1-based) → `old_subset/<SET>_<sub>/`; copy (`.partial` → replace) or hardlink
+  (same drive, no fallback); OUTPUT new or empty, outside INPUT; space check with
+  `copy.required_space`; mapping CSV `<OUTPUT>_mapping.csv` **next to** OUTPUT (columns
+  `OriginalFile, OriginalImageBase, OriginalRecordName, Group, Kind, NewPath, NewRelativeFolder,
+  NewImageBase, NewRecordName`; record names via `discovery.record_name`). `verify MAPPING FLAT
+  LAYERED`: both subsets mapped back to original bases (ImageBase / (RelativeFolder, ImageBase),
+  else RecordName, so MATLAB CSVs work); SAME only if the sets match; copies listed but not a
+  difference. Tests in `tests/test_make_layered_dataset.py`.
+- VALIDATION Phase 3B runs the script **from the README instructions** (also tests the README),
+  with cross-line AOIs `blueberry_aoi_cross_all.kml` / `_cross_two.kml` (public examples) and
+  screenshots 11–13 (RELEASE.md A). The V50 question (renamed bands grouped in Pix4D?) moved to
+  **V77e**.
 
 Next: **milestone 7, real-data validation on the work computer** (Windows). Everything is run
 from `docs/VALIDATION.md` top to bottom, phase by phase; results (numbers only) go into its
@@ -302,14 +331,15 @@ data: issues become public with the repo). Take to that session:
   *Finish and clean up*.
 - Phases 4–5 use real campaign data: outputs only in `C:\uav-demo\private`, anonymous numbers
   only in the repo. Delete the Phase 5 outputs on the campaign drive afterwards.
-- Dataset: download the EagleNXT blueberry ZIP (note its size: README says "about 19 GB"),
-  extract to `C:\uav-demo\data\blueberry`; expect 3,360 TIFFs, 480 captures, all complete with
-  `--bands 7`. MATLAB and the `.m` scripts already on the work computer are used for 2.7 and
+- Dataset: download the EagleNXT blueberry ZIP (20,822,285,409 B), extract, move the one folder
+  `altum-pt-blueberries-60m-sample-data` to `C:\uav-demo\data\blueberry`; expect 3,361 files,
+  3,360 TIFFs, no sub-folders, 480 captures, all complete with `--bands 7`. Phase 3B makes the
+  layered copy `C:\uav-demo\data\blueberry_layered` with hard links (README route). MATLAB and the `.m` scripts already on the work computer are used for 2.7 and
   V84 (if missing, bring them over privately, never through the repository).
 - Draw the AOIs in Google Earth Pro (2.5); they become the `examples/` KMLs (RELEASE.md A).
   Phase 3 needs QGIS for V70.
-- Open questions to answer there: V50 — does Pix4Dmapper group the 7 bands of the renamed flat
-  files? If not, switch the default to `--layout folders` (on the Mac). V41 — long paths in
+- Open questions to answer there: V77e — does Pix4Dmapper group the 7 bands of the renamed flat
+  files (only the layered copy has renamed files)? If not, switch the default to `--layout folders` (on the Mac). V41 — long paths in
   Explorer/Pix4D. V60/V66 — pickers sharp on high DPI and in front, bar not wrapping in the
   Windows console. V20c — which footprint buffer matches the Pix4D mosaic. Phase 1 — which
   install route works on a company computer. V91/V92 — are duplicates and project folders
@@ -355,7 +385,9 @@ data: issues become public with the repo). Take to that session:
   with the noreply email. Results contain numbers only: no coordinates, no work paths or names.
 - If Claude Code runs on the work computer: start with `docs/VALIDATION.md`, never commit data
   or outputs, and push results before anything is deleted.
-- Expected blueberry sanity numbers: 480 captures indexed, all complete with `--bands 7`.
+- Expected blueberry sanity numbers: one folder, 3,361 files; 480 captures indexed, all
+  complete with `--bands 7`. Layered copy (4 parts): 4 × 120 captures, 0 extra copies; with
+  `--add-duplicate`: 600 captures, 120 extra copies.
 
 ## Working style
 
