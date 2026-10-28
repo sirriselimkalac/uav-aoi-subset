@@ -153,7 +153,8 @@ Later: Docker image (secondary distribution), tkinter GUI, QGIS plugin, benchmar
 
 Done: **1 scaffold**, **2 index** (CI green on ubuntu/macOS/windows × Python 3.11/3.12),
 **3 filter** (CI green on all 6 jobs, 94 tests), **4 copy** (CI green on all 6 jobs, 136 tests),
-**5 footprint** + copy `_subset_NN` / `--layout` (CI green on all 6 jobs, 183 tests).
+**5 footprint** + copy `_subset_NN` / `--layout` (CI green on all 6 jobs, 183 tests),
+**6 pickers, progress, polished errors** (CI green on all 6 jobs, 225 tests).
 Package version is `0.0.1` until the v0.1.0 tag (milestone 8). Repo is private until then.
 
 Decisions made so far:
@@ -227,28 +228,57 @@ Decisions made so far:
   (so the CSV can never be overwritten), existing KML needs `--overwrite`, `--ratio` only with
   `--hull concave`, `--per-folder` without DEPTH = full folder (`const=0`).
 
-Validation prep is in place: `docs/VALIDATION.md` (work-computer checklist, covers milestones
-2–6; footprint = V20–V20g, Pix4D flat-layout check = V50), `docs/RELEASE.md` (README asset list + public gate), `scripts/compare_outputs.py`,
-`.gitattributes` (LF in the repo, also for commits from Windows). Not yet run on real data.
+- Pickers (`pickers.py`, front end only; tkinter imported inside functions): offered only when
+  a required path is missing AND `pickers_available()`: no `--no-picker`, env
+  `UAV_AOI_SUBSET_NO_PICKER` unset/0, **stdin is a TTY** (scripts, schedulers, CI and pytest
+  never get a window), main thread, `DISPLAY`/`WAYLAND_DISPLAY` on Linux, `import tkinter` ok.
+  `Tk()` failing (`TclError`) → `PickerUnavailable` → usage error. Otherwise argparse's
+  "the following arguments are required" (exit 2). Hidden topmost root (in front on macOS);
+  Windows `SetProcessDpiAwareness(1)` (fallback `SetProcessDPIAware`). Order and start folder in
+  `cli.REQUIRED_PATHS`: filter CSV → AOI (in the CSV's folder), copy ROOT → CSV (in ROOT); only
+  missing paths asked. Cancel → "Cancelled: …" exit 1. Then `Equivalent command: uav-aoi-subset
+  …` on stdout (picked paths always double-quoted, inserted after the last typed positional).
+  Positionals are `nargs="?"`, `filter --aoi` is not argparse-required. `--no-picker` and
+  `--debug` come from a `parents=[common]` parser on every subcommand.
+- Progress (`console.py`, `ConsoleProgress`, stdlib only; `core/` still only calls
+  `progress(stage, done, total)`): on a terminal one bar via `\r` only (no ANSI), ASCII `#`/`-`,
+  width = terminal − 1, ≤ 10 redraws/s, ETA after 2 s and 1 %. Not a terminal: "<Stage>:
+  started", one line per 10 %, unknown totals (scan) every 10 s + a final line. Clock/stream
+  injectable for tests. filter/footprint have no stage (fast).
+- Errors (`cli.py`): `_error(message, next_step)` → `error: …` + indented next step on every
+  error. `_cannot_write` for output paths (PermissionError → "close it in the spreadsheet or use
+  --out"). `exif.install_hint()` is OS-specific (Windows: installer or rename
+  `exiftool(-k).exe`). `main()` catches KeyboardInterrupt → "Interrupted." exit 130 (copy also
+  writes the report so far and prints the `--dest` resume hint) and any other Exception → short
+  message + `--debug` hint + issues URL, exit 1; `--debug` prints the traceback. Exit codes 0/1/2/130
+  in the main `--help` epilog and the README. `--version` (custom action, runs ExifTool only then)
+  prints package, Python + platform, `ExifTool <ver> at <path>` or "not found on PATH".
 
-Next: milestone 6 (picker fallback, progress bars, polished errors). Watch out for:
-- Pickers (tkinter `filedialog`) only when a required path is missing AND a display is
-  available (`DISPLAY`/`WAYLAND_DISPLAY` on Linux; always on macOS/Windows, but catch
-  `tkinter.TclError` and missing tkinter, e.g. uv's python-build-standalone on some Linux).
-  Otherwise keep the current argparse error. Positional paths become `nargs="?"`; keep pickers
-  in a separate front-end module (`pickers.py`), never in `core/`. Cancel → exit 1 with a short
-  message (MATLAB printed "İşlem iptal edildi"; ours in English). Mapping: index ROOT → folder;
-  filter INDEX_CSV + `--aoi` → files (`*.csv`, `*.kml *.kmz`); copy ROOT + SUBSET_CSV;
-  footprint INDEX_CSV. Test by monkeypatching the picker functions (no real dialogs in CI).
-- Progress: `_ConsoleProgress` already exists (stderr, TTY only). Decide whether to add a bar
-  with percentage/ETA (stdlib only, no new runtime dependency) and give footprint/filter a stage
-  if they ever get slow; keep `core/` emitting only `progress(stage, done, total)`.
-- Polished errors: walk every `error:` message in `cli.py` for a next step (what to do), check
-  Ctrl+C → clean message and exit 130 instead of a traceback (copy already removes partial
-  files), and `PermissionError` on output paths.
-- `docs/VALIDATION.md` V60 covers pickers; update it with the final behaviour in the same commit.
-- Open question for the work computer: does Pix4Dmapper group the 7 Altum-PT bands correctly
-  with the renamed flat files (V50)? If not, switch the default to `--layout folders`.
+Validation prep is in place: `docs/VALIDATION.md` (work-computer checklist, covers milestones
+2–6; footprint = V20–V20g, Pix4D flat-layout check = V50, `--version` = V4, pickers / progress /
+Ctrl+C / permission = V60–V69), `docs/RELEASE.md` (README asset list + public gate),
+`scripts/compare_outputs.py`, `.gitattributes` (LF in the repo, also for commits from Windows).
+Not yet run on real data.
+
+Next: **milestone 7, real-data validation on the work computer** (Windows). Everything is run
+from `docs/VALIDATION.md` top to bottom; results (numbers only) go into its section 10 and are
+pushed from there before the clone is deleted. Take to that session:
+- Tools to install: Git, ExifTool (`winget install OliverBetz.ExifTool` or exiftool.org), uv.
+  GitHub sign-in through Git Credential Manager (repo is private); repo-local git identity with
+  the noreply email (commands in section 1). Delete the stored credentials in section 9.
+- Dataset: download the EagleNXT blueberry ZIP (note its size: README says "about 19 GB"),
+  extract to `C:\uav-demo\data\blueberry`; expect 3,360 TIFFs, 480 captures, all complete with
+  `--bands 7`. MATLAB must be available for section 7 (comparison with the `.m` scripts — copy
+  them from the Mac's parent folder by hand, never into the clone).
+- Draw the AOIs in Google Earth Pro (section 5); they become the `examples/` KMLs (RELEASE.md A).
+- Open questions to answer there: V50 — does Pix4Dmapper group the 7 bands of the renamed flat
+  files? If not, switch the default to `--layout folders` (on the Mac). V41 — long paths in
+  Explorer/Pix4D. V60/V66 — pickers sharp on high DPI and in front, bar not wrapping in the
+  Windows console. V20c — which footprint buffer matches the Pix4D mosaic.
+- Also collect the RELEASE.md section A assets (screenshots, example KMLs, README facts) in the
+  same visit, then push everything from the work computer (section 9).
+- Back on the Mac: fix findings, re-validate on the work computer if code changed; then
+  milestone 8 (README) and 9 (public gate).
 
 ## Data and privacy rules
 
