@@ -135,6 +135,42 @@ to file/folder pickers (tkinter) — this mirrors the MATLAB `uigetdir`/`uigetfi
    from the validation run. Make the repo public and tag **v0.1.0**.
 Later: Docker image (secondary distribution), tkinter GUI, QGIS plugin, benchmarks.
 
+## Status (update at the end of each milestone)
+
+Done: **1 scaffold**, **2 index** (CI green on ubuntu/macOS/windows × Python 3.11/3.12).
+Package version is `0.0.1` until the v0.1.0 tag (milestone 8). Repo is private until then.
+
+Decisions made so far:
+- `core/discovery.py` holds the ONE sanitizer (`sanitize_token`, `flat_folder_name`,
+  `record_name`); `copy` must reuse it for folder flattening and exact matching.
+- Capture key = relative folder + image base, any depth. Pattern regex needs groups `base`
+  and `band` and is matched case-insensitively. Captures without band 1 are still listed
+  (incomplete, no position).
+- Skipped while indexing: hidden folders, `--exclude` globs (case-insensitive on every OS,
+  matched against the folder name or the `/`-joined relative path), and any folder containing
+  the `OUTPUT_MARKER` file `.uav-aoi-subset-output`.
+- Index CSV: `RecordName, Complete (1/0), GPSLatitude, GPSLongitude` (same as MATLAB), then
+  `GPSAltitude, CaptureTime, BandsFound, MissingBands` (`;`-separated), `RelativeFolder` (`/`),
+  `ImageBase`. Written as `utf-8-sig` (Excel). `read_index_csv` also reads MATLAB CSVs.
+- ExifTool: chunks of 500, `-json -n -q`; coordinate sign taken from the Ref tags; output
+  matched back to the inputs by normalised `SourceFile` path; unreadable files → no position.
+- **Windows:** never put a non-ASCII path on a subprocess command line. Pass data through a
+  UTF-8 argfile and refer to the argfile by its ASCII name with `cwd=` set to its folder.
+  Windows CI caught this.
+- Tests: synthetic TIFFs from `tests/synthetic.py` (`ALTUM_LAYOUT` mirrors the real tree,
+  `write_gps` uses exiftool); `requires_exiftool` marker skips tests when exiftool is absent.
+
+Next: milestone 3 (`filter`). Watch out for:
+- Add `shapely` and `pyproj` only now. Keep the KML/KMZ loader (`core/aoi.py`) separate from
+  the geometry-based filter.
+- Parse `Polygon` outer/inner boundaries and `MultiGeometry`; ignore LineStrings and Points.
+  KMZ = zip, its main KML is usually `doc.kml`. Handle the KML namespace.
+- Buffer in metres via local UTM (pyproj), then back to WGS84.
+- Output `<aoi-name>_image_index_YYYYMMDD.csv` next to the KML. Keep every input column.
+  Rows without a position are never inside; report how many there were.
+- Points exactly on the boundary: decide on purpose (MATLAB `inpolygon` counts them as
+  inside → use `covers`, not `contains`) and test it.
+
 ## Data and privacy rules
 
 - Never commit imagery, ZIPs, Pix4D outputs or real campaign coordinates. Test data is
