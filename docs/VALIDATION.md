@@ -27,9 +27,9 @@ committed or redistributed; the README only links to it.
 ## 0. Before you start
 
 - [ ] On GitHub, check the latest commit on `main` and its CI status (green on all 6 jobs).
-- [ ] Read the *Status* section of `CLAUDE.md`. Sections marked *(milestone 5)* or
-      *(milestone 6)* can only be checked once those milestones are done. It is best to come
-      to the work computer when milestones 1–6 are all done, so one visit covers everything.
+- [ ] Read the *Status* section of `CLAUDE.md`. Sections marked *(milestone 6)* can only be
+      checked once that milestone is done. It is best to come to the work computer when
+      milestones 1–6 are all done, so one visit covers everything.
 
 ## 1. Setup (once)
 
@@ -100,11 +100,28 @@ Measure-Command { aoi index $Data --out "$Res\ours_index.csv" | Out-Default }
 | V13 | ExifTool not on PATH: `aoi index $Data --out "$Res\x.csv" --exiftool "<full path to exiftool.exe>"` with a PATH without ExifTool (`$env:Path = ($env:Path -split ';' \| ? { $_ -notmatch 'exiftool' }) -join ';'`) | works with `--exiftool`; without it, a clear "ExifTool was not found" error. Open a new window afterwards. |
 | V14 | If the dataset contains calibration-panel captures in their own folder: `aoi index $Data --exclude "<panel folder>" --out "$Res\nopanel.csv"` | panel captures left out |
 
-## 4. footprint *(milestone 5)*
+## 4. footprint
+
+```powershell
+aoi footprint "$Res\ours_index.csv" --out "$Aoi\blueberry_footprint.kml"
+aoi footprint "$Res\ours_index.csv" --out "$Aoi\blueberry_footprint_concave.kml" --hull concave
+aoi footprint "$Res\ours_index.csv" --out "$Aoi\blueberry_footprint_b20.kml" --buffer 20
+aoi footprint "$Res\ours_index.csv" --out "$Res\blueberry_footprint_folders.kml" --per-folder
+```
+
+Keep the merged-area KML you made earlier with Pix4D **outside the clone** (for example in
+`$Res`). It shows real coordinates and is never committed.
 
 | ID | Check | Expected |
 |---|---|---|
-| V20 | `aoi footprint "$Res\ours_index.csv" --out "$Aoi\blueberry_footprint.kml"`, open in Google Earth Pro | one polygon around the whole field |
+| V20 | Default (convex) footprint, open in Google Earth Pro | one yellow, semi-transparent polygon around all capture positions; 480 captures used, 0 without GPS; click it: the balloon shows captures, area (ha) and the CSV name. Note the area. |
+| V20a | `--hull concave` | area smaller than or equal to V20; the outline follows the flight lines (no large empty corners). If it cuts into the field, try `--ratio 0.5` and note which ratio fits best. |
+| V20b | `--buffer 20` | outline about 20 m outside V20 everywhere (Google Earth ruler) |
+| V20c | Open V20, V20b and the Pix4D merged-area KML together | visual comparison: the Pix4D area (the imaged ground) should lie around the V20 outline; note roughly which buffer (V20b or another value) matches the Pix4D area best |
+| V20d | `--per-folder` | one coloured polygon per image folder; the polygon list in the summary adds up to 480 captures. Re-run with `--per-folder 2` (or the depth of the flight folders, see the folder layout noted in section 1) for one polygon per flight. |
+| V20e | `aoi filter "$Res\ours_index.csv" --aoi "$Aoi\blueberry_footprint.kml" --out "$Res\fp_subset.csv"` | 480 captures inside (the footprint as an AOI keeps every capture) |
+| V20f | Run the first command again | refused: the KML exists, add `--overwrite` |
+| V20g | `aoi footprint "$Res\matlab_index.csv" --out "$Res\matlab_footprint.kml"` (after section 7) | same polygon as V20 when both are opened in Google Earth |
 
 ## 5. Draw the AOIs in Google Earth Pro
 
@@ -249,7 +266,14 @@ ExifTool: `_____`  LongPathsEnabled: `_`  Dataset folder layout: `______________
 | V12 | | |
 | V13 | | |
 | V14 | | |
-| V20 | | |
+| V20 | | area (ha) |
+| V20a | | area (ha), ratio used |
+| V20b | | |
+| V20c | | buffer that matches Pix4D best |
+| V20d | | polygons (full folder / per flight) |
+| V20e | | captures inside |
+| V20f | | |
+| V20g | | |
 | V21 | | captures inside |
 | V22 | | |
 | V23 | | |

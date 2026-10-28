@@ -22,7 +22,7 @@ is deleted.
 | `examples/blueberry_aoi_north.kml` | one simple polygon over part of the blueberry field |
 | `examples/blueberry_aoi_blocks.kml` | two polygons, one with a hole |
 | `examples/blueberry_aoi_north.kmz` | the same as the first one, as KMZ |
-| `examples/blueberry_footprint.kml` | output of `footprint` for the whole dataset *(milestone 5)* |
+| `examples/blueberry_footprint.kml` | output of `footprint` for the whole dataset (V20) |
 | `examples/README.md` | one line per file: what it shows and the capture count it gives with `filter` |
 
 Before you commit them, open each KML in Notepad and check:

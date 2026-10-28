@@ -9,9 +9,8 @@ separately in Pix4Dmapper.
 
 A free, open-source alternative to commercial GIS tools for this one job.
 
-> **Status:** work in progress, not yet validated on real data. `index`, `filter` and `copy`
-> work; `footprint` is not implemented yet. The command-line interface below is the target
-> shape.
+> **Status:** work in progress, not yet validated on real data. `index`, `filter`, `copy`
+> and `footprint` work. The command-line interface below is the target shape.
 
 ## Where it fits
 
@@ -29,10 +28,13 @@ raw captures  →  AOI subset (this tool)  →  Pix4D processing  →  ML tiling
    calibration-panel shots.
 2. **filter**: keep the captures that fall inside one or more AOI polygons (KML/KMZ, with
    holes and an optional buffer in metres).
-3. **copy**: copy (or hard-link) the band files of the selected captures into a flat folder
-   structure that is easy to import into Pix4Dmapper, and write a report.
-4. **footprint**: write the convex hull of all captures as a KML, which helps when you draw
-   the AOIs.
+3. **copy**: copy (or hard-link) the band files of the selected captures into one new
+   folder next to the project (`<project>_subset_01`, `_02`, …), each file named after its
+   folder chain (`Part1/0000SET/000/IMG_0000_1.tif` → `Part1_0000SET_000_IMG_0000_1.tif`)
+   so Pix4Dmapper gets a single folder of images, and write a report.
+4. **footprint**: write the outline of all capture positions as a KML polygon (convex or
+   concave, optionally buffered, optionally one polygon per flight folder), which helps when
+   you draw the AOIs and can itself be used as an AOI.
 
 ## Requirements
 
@@ -57,8 +59,10 @@ uv run uav-aoi-subset --help
 uav-aoi-subset index     ROOT [--bands 7] [--pattern ...] [--exclude DIR_GLOB ...] [--out CSV]
 uav-aoi-subset filter    INDEX_CSV --aoi AREA.kml|.kmz [--buffer METRES] [--out CSV]
 uav-aoi-subset copy      ROOT SUBSET_CSV [--dest DIR] [--mode copy|hardlink|move]
-                         [--dry-run] [--include FILE_GLOB ...] [--extra-captures ...]
-uav-aoi-subset footprint INDEX_CSV [--out KML]
+                         [--layout flat|folders] [--dry-run] [--include FILE_GLOB ...]
+                         [--extra-captures ...]
+uav-aoi-subset footprint INDEX_CSV [--out KML] [--hull convex|concave] [--ratio R]
+                         [--buffer METRES] [--per-folder [DEPTH]] [--overwrite]
 ```
 
 `filter` reads every Polygon in the KML/KMZ (also inside folders and multi-geometries),
