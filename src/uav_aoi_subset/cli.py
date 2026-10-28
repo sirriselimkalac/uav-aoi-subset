@@ -10,6 +10,18 @@ from pathlib import Path
 
 from uav_aoi_subset import __version__
 from uav_aoi_subset.core.aoi import AOIError, load_aoi
+from uav_aoi_subset.core.copy import (
+    MODES,
+    CopyError,
+    CopyPlan,
+    default_dest,
+    default_report_path,
+    execute_copy,
+    load_extra_captures,
+    plan_copy,
+    required_space,
+    write_copy_report,
+)
 from uav_aoi_subset.core.discovery import DEFAULT_PATTERN
 from uav_aoi_subset.core.exif import ExifToolError, ExifToolNotFoundError, ExifToolReader
 from uav_aoi_subset.core.filter import buffer_metres, default_subset_path, filter_records
@@ -95,21 +107,86 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output CSV path (default: next to the AOI, <AOI name>_image_index_YYYYMMDD.csv).",
     )
 
-    p_copy = sub.add_parser("copy", help="Copy the band files of a subset CSV.")
-    p_copy.add_argument("root", type=Path, metavar="ROOT", help="Project root folder.")
-    p_copy.add_argument("subset_csv", type=Path, metavar="SUBSET_CSV")
-    p_copy.add_argument("--dest", type=Path, metavar="DIR", help="Output folder.")
-    p_copy.add_argument("--mode", choices=["copy", "hardlink", "move"], default="copy")
-    p_copy.add_argument("--dry-run", action="store_true", help="Report only, change nothing.")
+    p_copy = sub.add_parser(
+        "copy",
+        help="Copy the band files of a subset CSV into one flat output folder.",
+        description="Copy (or hard-link, or move) the band files of the captures in "
+        "SUBSET_CSV. Folders are flattened (A/B/C -> A_B_C). Files already at the "
+        "destination with the same size are skipped, so an interrupted run can simply be "
+        "started again; files with a different size are never overwritten without "
+        "--overwrite.",
+    )
     p_copy.add_argument(
-        "--include", nargs="+", default=[], metavar="FILE_GLOB", help="Extra files to copy."
+        "root", type=Path, metavar="ROOT", help="Project root folder (as given to 'index')."
+    )
+    p_copy.add_argument(
+        "subset_csv", type=Path, metavar="SUBSET_CSV", help="CSV written by 'filter'."
+    )
+    p_copy.add_argument(
+        "--dest",
+        type=Path,
+        metavar="DIR",
+        help="Output folder (default: <ROOT parent>/<ROOT name>_subsets/<SUBSET_CSV name>).",
+    )
+    p_copy.add_argument(
+        "--mode",
+        choices=MODES,
+        default="copy",
+        help="copy (default); hardlink (same drive only, uses no extra space); move (removes "
+        "the files from ROOT, needs --confirm-move).",
+    )
+    p_copy.add_argument(
+        "--confirm-move", action="store_true", help="Confirm that --mode move may remove files."
+    )
+    p_copy.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace destination files whose size differs from the source.",
+    )
+    p_copy.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would happen without writing anything (add --report to save the list).",
+    )
+    p_copy.add_argument(
+        "--report",
+        type=Path,
+        metavar="CSV",
+        help="Per-file report (default: <output folder>_copy_report_YYYYMMDD-HHMMSS.csv next "
+        "to the output folder; not written on --dry-run unless given).",
+    )
+    p_copy.add_argument(
+        "--bands",
+        type=int,
+        default=DEFAULT_BANDS,
+        help=f"Band files per capture (default {DEFAULT_BANDS}; RedEdge = 5).",
+    )
+    p_copy.add_argument(
+        "--pattern", default=DEFAULT_PATTERN, help="Band file name regex, as for 'index'."
+    )
+    p_copy.add_argument(
+        "--exclude",
+        nargs="+",
+        default=[],
+        metavar="DIR_GLOB",
+        help="Folders to skip while looking for captures, as for 'index' (speeds up big trees).",
+    )
+    p_copy.add_argument(
+        "--include",
+        nargs="+",
+        default=[],
+        metavar="FILE_GLOB",
+        help="Helper files to copy into the output root, relative to ROOT or absolute; '**' "
+        "matches any folder depth. Example: --include '**/*reflectance*.csv'",
     )
     p_copy.add_argument(
         "--extra-captures",
         nargs="+",
         default=[],
-        metavar="CAPTURE",
-        help="Extra captures to copy, e.g. calibration-panel shots.",
+        metavar="NAME_OR_FILE",
+        help="Captures to add although they are outside the AOI, e.g. calibration-panel shots: "
+        "record names, text files with one name per line, or an index CSV. Found even in "
+        "--exclude'd folders.",
     )
 
     p_footprint = sub.add_parser("footprint", help="Write the convex hull of all captures as KML.")
@@ -122,7 +199,12 @@ def build_parser() -> argparse.ArgumentParser:
 class _ConsoleProgress:
     """One self-overwriting status line on stderr; silent when stderr is not a terminal."""
 
-    LABELS = {"scan": "Scanning folders: {done} files", "exif": "Reading GPS: {done}/{total}"}
+    LABELS = {
+        "scan": "Scanning folders: {done} files",
+        "exif": "Reading GPS: {done}/{total}",
+        "plan": "Checking files: {done}/{total} captures",
+        "copy": "Writing files: {done}/{total}",
+    }
 
     def __init__(self) -> None:
         self.enabled = sys.stderr.isatty()
@@ -159,6 +241,18 @@ def _with_missing_bands(record: IndexRecord) -> str:
     return f"{record.record_name}  [{';'.join(map(str, record.missing_bands))}]"
 
 
+def _pattern_ok(pattern: str) -> bool:
+    try:
+        regex = re.compile(pattern)
+    except re.error as exc:
+        print(f"error: invalid --pattern: {exc}", file=sys.stderr)
+        return False
+    if not {"base", "band"} <= set(regex.groupindex):
+        print("error: --pattern must define the groups 'base' and 'band'", file=sys.stderr)
+        return False
+    return True
+
+
 def _run_index(args: argparse.Namespace) -> int:
     root: Path = args.root
     if not root.is_dir():
@@ -167,13 +261,7 @@ def _run_index(args: argparse.Namespace) -> int:
     if args.bands < 1:
         print("error: --bands must be at least 1", file=sys.stderr)
         return 1
-    try:
-        regex = re.compile(args.pattern)
-    except re.error as exc:
-        print(f"error: invalid --pattern: {exc}", file=sys.stderr)
-        return 1
-    if not {"base", "band"} <= set(regex.groupindex):
-        print("error: --pattern must define the groups 'base' and 'band'", file=sys.stderr)
+    if not _pattern_ok(args.pattern):
         return 1
 
     progress = _ConsoleProgress()
@@ -263,6 +351,156 @@ def _run_filter(args: argparse.Namespace) -> int:
     return 0
 
 
+def _fmt_bytes(n: int) -> str:
+    if n < 1024:
+        return f"{n} bytes"
+    size = n / 1024
+    for unit in ("KB", "MB", "GB"):
+        if size < 1024:
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
+
+
+def _print_copy_summary(plan: CopyPlan, dry_run: bool) -> None:
+    s = plan.summary()
+    st = s.statuses
+    if dry_run:
+        verb = {"copy": "to copy", "hardlink": "to link", "move": "to move"}[plan.mode]
+    else:
+        verb = {"copy": "copied", "hardlink": "linked", "move": "moved"}[plan.mode]
+    pending = st["would-copy"] + st["would-link"] + st["would-move"] + st["would-overwrite"]
+    done = st["copied"] + st["linked"] + st["moved"] + st["overwritten"]
+    print(
+        f"Subset records:     {s.records}"
+        + (f" (+ {s.extra_records} extra)" if s.extra_records else "")
+    )
+    print(f"  captures found:   {s.captures}")
+    print(f"  not found:        {len(s.not_found)}")
+    if s.ambiguous:
+        print(f"  ambiguous:        {len(s.ambiguous)}")
+    print(f"  incomplete:       {len(s.incomplete)} (the bands that exist are included)")
+    print(f"Captures {verb}:".ljust(20) + f"{s.groups_transferred}")
+    print(f"  already complete: {s.groups_skipped}")
+    print(
+        f"Files {verb}:".ljust(20)
+        + f"{pending if dry_run else done} ({_fmt_bytes(s.bytes_transferred)})"
+    )
+    skipped = st["skipped-existing"] + st["already-at-destination"]
+    print(f"  skipped:          {skipped} (already at the destination)")
+    if st["would-overwrite"] or st["overwritten"]:
+        print(f"  overwritten:      {st['would-overwrite'] + st['overwritten']}")
+    print(f"  conflicts:        {st['conflict']} (different size at the destination, left alone)")
+    if not dry_run:
+        print(f"  failed:           {st['failed'] + st['aborted']}")
+    if s.include_files:
+        print(f"Include files:      {s.include_files}")
+    print(
+        f"Space needed:       {_fmt_bytes(plan.bytes_needed)} + reserve = "
+        f"{_fmt_bytes(required_space(plan.bytes_needed))} (free: {_fmt_bytes(plan.bytes_free)})"
+    )
+    _list_some("Captures not found under ROOT", s.not_found)
+    _list_some(
+        "Record names found in more than one folder (not copied; use a CSV with "
+        "RelativeFolder/ImageBase)",
+        s.ambiguous,
+    )
+    _list_some("Incomplete captures", s.incomplete)
+    _list_some(
+        "Conflicts",
+        [f"{t.destination}: {t.message}" for t in plan.tasks if t.status == "conflict"],
+    )
+    _list_some("Failed", [f"{t.source}: {t.message}" for t in plan.tasks if t.status == "failed"])
+
+
+def _run_copy(args: argparse.Namespace) -> int:
+    root: Path = args.root
+    if not root.is_dir():
+        print(f"error: not a folder: {root}", file=sys.stderr)
+        return 1
+    if not args.subset_csv.is_file():
+        print(f"error: not a file: {args.subset_csv}", file=sys.stderr)
+        return 1
+    if args.bands < 1:
+        print("error: --bands must be at least 1", file=sys.stderr)
+        return 1
+    if not _pattern_ok(args.pattern):
+        return 1
+    if args.mode == "move" and not args.confirm_move:
+        print(
+            "error: --mode move removes the band files from ROOT; add --confirm-move if that "
+            "is what you want (or use --mode copy / hardlink)",
+            file=sys.stderr,
+        )
+        return 1
+
+    progress = _ConsoleProgress()
+    try:
+        records = read_index_csv(args.subset_csv)
+        extras = load_extra_captures(args.extra_captures)
+        dest = args.dest or default_dest(root, args.subset_csv)
+        plan = plan_copy(
+            root,
+            records,
+            dest,
+            mode=args.mode,
+            bands=args.bands,
+            pattern=args.pattern,
+            exclude=args.exclude,
+            extra_captures=extras,
+            include=args.include,
+            overwrite=args.overwrite,
+            progress=progress,
+        )
+    except (CopyError, ValueError, OSError) as exc:
+        progress.finish()
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    progress.finish()
+
+    print(f"Output folder:      {plan.dest}")
+    print(
+        f"Mode:               {plan.mode}"
+        + ("  (dry run, nothing is written)" if args.dry_run else "")
+    )
+    for warning in plan.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+
+    if not plan.enough_space:
+        _print_copy_summary(plan, dry_run=True)
+        print(
+            f"\nerror: not enough free space at {plan.dest}: "
+            f"{_fmt_bytes(required_space(plan.bytes_needed))} needed, "
+            f"{_fmt_bytes(plan.bytes_free)} free",
+            file=sys.stderr,
+        )
+        return 1
+
+    failed = None
+    if not args.dry_run:
+        try:
+            execute_copy(plan, progress=progress)
+        except CopyError as exc:
+            failed = exc
+        finally:
+            progress.finish()
+
+    _print_copy_summary(plan, dry_run=args.dry_run)
+    report = args.report or (None if args.dry_run else default_report_path(plan.dest))
+    if report is not None:
+        try:
+            write_copy_report(plan.tasks, report)
+            print(f"\nReport written to: {report}")
+        except OSError as exc:
+            print(f"error: cannot write the report {report}: {exc}", file=sys.stderr)
+            return 1
+    if failed is not None:
+        print(f"\nerror: {failed}", file=sys.stderr)
+        return 1
+    st = plan.summary().statuses
+    return 1 if st["conflict"] or st["failed"] else 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     # Folder names may contain characters the console code page cannot show (Windows).
     for stream in (sys.stdout, sys.stderr):
@@ -277,5 +515,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_index(args)
     if args.command == "filter":
         return _run_filter(args)
+    if args.command == "copy":
+        return _run_copy(args)
     print(f"uav-aoi-subset {args.command}: not implemented yet.", file=sys.stderr)
     return 2

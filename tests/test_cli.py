@@ -15,6 +15,7 @@ from synthetic import (
 
 from uav_aoi_subset import __version__
 from uav_aoi_subset.cli import main
+from uav_aoi_subset.core.discovery import discover_captures
 from uav_aoi_subset.core.filter import default_subset_path
 from uav_aoi_subset.core.index import IndexRecord, read_index_csv, write_index_csv
 
@@ -226,3 +227,124 @@ def test_filter_reads_matlab_csv(filter_inputs, tmp_path):
     out = tmp_path / "subset.csv"
     assert main(["filter", str(matlab), "--aoi", str(aoi), "--out", str(out)]) == 0
     assert [r.record_name for r in read_index_csv(out)] == ["A_IMG_0001"]
+
+
+@pytest.fixture
+def copy_inputs(tmp_path):
+    """Campaign tree plus a subset CSV for its Part2 capture, as 'filter' would write it."""
+    root = tmp_path / "Kampanya"
+    make_altum_tree(root)
+    (root / "Kalibrasyon").mkdir()
+    write_capture(root / "Kalibrasyon", "IMG_0000", range(1, 8))
+    (root / "Kalibrasyon" / "panel_reflectance.csv").write_text("nm,r\n550,0.5\n")
+    captures = [c for c in discover_captures(root) if "Part2" in c.relative_folder]
+    records = [
+        IndexRecord(
+            record_name=c.record_name,
+            complete=True,
+            latitude=50.0,
+            longitude=10.0,
+            altitude=None,
+            capture_time=None,
+            bands_found=c.bands_found,
+            missing_bands=(),
+            relative_folder=c.relative_folder,
+            image_base=c.base,
+        )
+        for c in captures
+    ]
+    subset = tmp_path / "aoi" / "Kuzey_image_index_20261028.csv"
+    subset.parent.mkdir()
+    write_index_csv(records, subset)
+    return root, subset
+
+
+def test_copy_end_to_end(copy_inputs, tmp_path, capsys):
+    root, subset = copy_inputs
+    args = [
+        "copy",
+        str(root),
+        str(subset),
+        "--include",
+        "**/panel_*.csv",
+        "--extra-captures",
+        "Kalibrasyon_IMG_0000",
+    ]
+    assert main(args) == 0
+    dest = tmp_path / "Kampanya_subsets" / "Kuzey_image_index_20261028"
+    assert (dest / "Saha_Fotoğrafları_Part2_0000SET_000" / "IMG_0000_7.tif").is_file()
+    assert (dest / "Kalibrasyon" / "IMG_0000_1.tif").is_file()
+    assert (dest / "panel_reflectance.csv").is_file()
+    out = capsys.readouterr().out
+    assert "Subset records:     1 (+ 1 extra)" in out
+    assert "Files copied:       15" in out  # 14 band files + 1 include
+    assert "Include files:      1" in out
+    (report,) = dest.parent.glob("Kuzey_image_index_20261028_copy_report_*.csv")
+    assert "copied" in report.read_text(encoding="utf-8-sig")
+
+    # Second run: nothing left to do.
+    assert main(args) == 0
+    out = capsys.readouterr().out
+    assert "Files copied:       0" in out
+    assert "skipped:          15" in out
+
+
+def test_copy_dry_run_writes_nothing(copy_inputs, tmp_path, capsys):
+    root, subset = copy_inputs
+    before = sorted(p for p in tmp_path.rglob("*"))
+    assert main(["copy", str(root), str(subset), "--dry-run"]) == 0
+    assert sorted(p for p in tmp_path.rglob("*")) == before
+    out = capsys.readouterr().out
+    assert "dry run" in out and "Files to copy:      7" in out
+
+    report = tmp_path / "dry.csv"
+    assert main(["copy", str(root), str(subset), "--dry-run", "--report", str(report)]) == 0
+    assert "would-copy" in report.read_text(encoding="utf-8-sig")
+
+
+def test_copy_move_needs_confirmation(copy_inputs, capsys):
+    root, subset = copy_inputs
+    assert main(["copy", str(root), str(subset), "--mode", "move"]) == 1
+    assert "--confirm-move" in capsys.readouterr().err
+    assert len(discover_captures(root)) == 9  # nothing moved
+
+    assert main(["copy", str(root), str(subset), "--mode", "move", "--confirm-move"]) == 0
+    assert len(discover_captures(root)) == 8
+
+
+def test_copy_conflict_exit_code(copy_inputs, tmp_path, capsys):
+    root, subset = copy_inputs
+    dest = tmp_path / "out"
+    assert main(["copy", str(root), str(subset), "--dest", str(dest)]) == 0
+    (dest / "Saha_Fotoğrafları_Part2_0000SET_000" / "IMG_0000_2.tif").write_bytes(b"x")
+    assert main(["copy", str(root), str(subset), "--dest", str(dest)]) == 1
+    assert "conflicts:        1" in capsys.readouterr().out
+    assert main(["copy", str(root), str(subset), "--dest", str(dest), "--overwrite"]) == 0
+
+
+def test_copy_rejects_bad_arguments(copy_inputs, tmp_path, capsys):
+    root, subset = copy_inputs
+    assert main(["copy", str(tmp_path / "nope"), str(subset)]) == 1
+    assert main(["copy", str(root), str(tmp_path / "nope.csv")]) == 1
+    assert main(["copy", str(root), str(subset), "--bands", "0"]) == 1
+    assert main(["copy", str(root), str(subset), "--pattern", "("]) == 1
+    foreign = tmp_path / "foreign"
+    foreign.mkdir()
+    (foreign / "x.txt").write_text("x")
+    assert main(["copy", str(root), str(subset), "--dest", str(foreign)]) == 1
+    err = capsys.readouterr().err
+    assert "not a folder" in err and "not a file" in err and "--bands" in err
+    assert "invalid --pattern" in err and "not empty" in err
+
+
+def test_copy_not_enough_space(copy_inputs, tmp_path, monkeypatch, capsys):
+    from collections import namedtuple
+
+    from uav_aoi_subset.core import copy as copy_mod
+
+    Usage = namedtuple("Usage", "total used free")
+    monkeypatch.setattr(copy_mod.shutil, "disk_usage", lambda p: Usage(1, 1, 0))
+    root, subset = copy_inputs
+    assert main(["copy", str(root), str(subset), "--dest", str(tmp_path / "out")]) == 1
+    assert "not enough free space" in capsys.readouterr().err
+    assert not (tmp_path / "out").exists()
