@@ -460,6 +460,7 @@ def _run_index(args: argparse.Namespace) -> int:
         return 1
 
     progress = ConsoleProgress()
+    not_scanned: list[str] = []
     try:
         reader = ExifToolReader(args.exiftool)
         records = build_index(
@@ -469,6 +470,7 @@ def _run_index(args: argparse.Namespace) -> int:
             pattern=args.pattern,
             exclude=args.exclude,
             progress=progress,
+            warnings=not_scanned,
         )
     except ExifToolNotFoundError as exc:
         return _error(str(exc))  # the message already says how to install it
@@ -482,6 +484,7 @@ def _run_index(args: argparse.Namespace) -> int:
         progress.finish()
 
     if not records:
+        _list_some("Folders not scanned", not_scanned)
         return _error(
             f"no band files matching the pattern were found under {root}",
             "Check ROOT, --pattern and --bands, and that --exclude does not skip the image "
@@ -505,6 +508,7 @@ def _run_index(args: argparse.Namespace) -> int:
         [_with_missing_bands(r) for r in incomplete],
     )
     _list_some("Captures without a GPS position", [r.record_name for r in no_position])
+    _list_some("Folders not scanned", not_scanned)
     if reader.warnings:
         _list_some("ExifTool warnings", "\n".join(reader.warnings).splitlines())
     print(f"\nIndex written to: {out}")

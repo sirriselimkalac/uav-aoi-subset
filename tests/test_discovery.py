@@ -1,3 +1,7 @@
+import os
+import sys
+from pathlib import Path
+
 import pytest
 from synthetic import ALTUM_LAYOUT, make_altum_tree, write_capture
 
@@ -120,3 +124,79 @@ def test_progress_is_reported(tmp_path):
     discover_captures(tmp_path, progress=lambda *a: calls.append(a))
     assert calls
     assert all(stage == "scan" and total is None for stage, _, total in calls)
+
+
+def test_skips_windows_system_folders_by_name(tmp_path):
+    write_capture(tmp_path / "flight", "IMG_0001", [1])
+    write_capture(tmp_path / "$RECYCLE.BIN" / "S-1-5-21", "IMG_0002", [1])
+    write_capture(tmp_path / "System Volume Information", "IMG_0003", [1])
+    warnings = []
+    captures = discover_captures(tmp_path, warnings=warnings)
+    assert [c.base for c in captures] == ["IMG_0001"]
+    assert warnings == []  # skipped silently
+
+
+def test_skips_folders_with_hidden_and_system_attributes(tmp_path, monkeypatch):
+    write_capture(tmp_path / "flight", "IMG_0001", [1])
+    write_capture(tmp_path / "Recovery", "IMG_0002", [1])
+    write_capture(tmp_path / "HiddenOnly", "IMG_0003", [1])
+    real_lstat = Path.lstat
+
+    class Stat:
+        def __init__(self, st, attributes):
+            self._st, self.st_file_attributes = st, attributes
+
+        def __getattr__(self, name):
+            return getattr(self._st, name)
+
+    def fake_lstat(path):
+        attributes = {"Recovery": 0x2 | 0x4, "HiddenOnly": 0x2}.get(path.name, 0)
+        return Stat(real_lstat(path), attributes)
+
+    monkeypatch.setattr(Path, "lstat", fake_lstat)
+    assert sorted(c.base for c in discover_captures(tmp_path)) == ["IMG_0001", "IMG_0003"]
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32" or getattr(os, "geteuid", lambda: 1)() == 0,
+    reason="needs POSIX permissions and a non-root user",
+)
+def test_unreadable_folder_gives_a_warning_not_a_crash(tmp_path):
+    write_capture(tmp_path / "flight", "IMG_0001", [1])
+    locked = tmp_path / "locked"
+    write_capture(locked, "IMG_0002", [1])
+    locked.chmod(0)
+    try:
+        warnings = []
+        captures = discover_captures(tmp_path, warnings=warnings)
+    finally:
+        locked.chmod(0o755)
+    assert [c.base for c in captures] == ["IMG_0001"]
+    assert len(warnings) == 1
+    assert warnings[0].startswith("cannot read folder locked:")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need extra rights on Windows")
+def test_symlink_loop_is_not_followed(tmp_path):
+    write_capture(tmp_path / "a" / "000", "IMG_0001", [1])
+    (tmp_path / "a" / "000" / "loop").symlink_to(tmp_path / "a", target_is_directory=True)
+    (tmp_path / "elsewhere").symlink_to(tmp_path / "a" / "000", target_is_directory=True)
+    warnings = []
+    captures = discover_captures(tmp_path, warnings=warnings)
+    assert [c.relative_folder for c in captures] == ["a/000"]
+    assert sorted(warnings) == [
+        "linked folder not followed: a/000/loop",
+        "linked folder not followed: elsewhere",
+    ]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="junctions exist only on Windows")
+def test_junction_loop_is_not_followed(tmp_path):
+    import _winapi
+
+    write_capture(tmp_path / "a" / "000", "IMG_0001", [1])
+    _winapi.CreateJunction(str(tmp_path / "a"), str(tmp_path / "a" / "000" / "loop"))
+    warnings = []
+    captures = discover_captures(tmp_path, warnings=warnings)
+    assert [c.relative_folder for c in captures] == ["a/000"]
+    assert warnings == ["linked folder not followed: a/000/loop"]

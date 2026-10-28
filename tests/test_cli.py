@@ -111,6 +111,17 @@ def test_index_end_to_end(tmp_path, capsys):
 
 
 @pytest.mark.requires_exiftool
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need extra rights on Windows")
+def test_index_lists_folders_not_scanned(tmp_path, capsys):
+    write_capture(tmp_path / "a", "IMG_0001", [1])
+    (tmp_path / "a" / "loop").symlink_to(tmp_path / "a", target_is_directory=True)
+    assert main(["index", str(tmp_path), "--bands", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "Folders not scanned:" in out
+    assert "linked folder not followed: a/loop" in out
+
+
+@pytest.mark.requires_exiftool
 def test_index_no_matches(tmp_path, capsys):
     (tmp_path / "notes.txt").write_text("x")
     assert main(["index", str(tmp_path)]) == 1

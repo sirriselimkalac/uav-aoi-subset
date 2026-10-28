@@ -63,15 +63,19 @@ def build_index(
     pattern: str = DEFAULT_PATTERN,
     exclude: Iterable[str] = (),
     progress: ProgressCallback = no_progress,
+    warnings: list[str] | None = None,
 ) -> list[IndexRecord]:
     """Index every capture under ``root``.
 
     The position of a capture is read from its band-1 file; captures without a band-1 file
-    are still listed (incomplete, no position) so they show up in the report.
+    are still listed (incomplete, no position) so they show up in the report. Folders that
+    were not scanned are reported in ``warnings`` (see :func:`discover_captures`).
     """
     if bands < 1:
         raise ValueError("bands must be at least 1")
-    captures = discover_captures(root, pattern=pattern, exclude=exclude, progress=progress)
+    captures = discover_captures(
+        root, pattern=pattern, exclude=exclude, progress=progress, warnings=warnings
+    )
 
     names = Counter(c.record_name for c in captures)
     clashes = sorted(n for n, count in names.items() if count > 1)

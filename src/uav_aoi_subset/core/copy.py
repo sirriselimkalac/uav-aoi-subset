@@ -456,7 +456,9 @@ def plan_copy(
     warnings = _check_dest(root, dest)
     regex = re.compile(pattern, re.IGNORECASE)
 
-    captures = discover_captures(root, pattern=pattern, exclude=exclude, progress=progress)
+    captures = discover_captures(
+        root, pattern=pattern, exclude=exclude, progress=progress, warnings=warnings
+    )
     lookup = _Lookup(captures)
     if extra_captures and exclude:
         extra_lookup = _Lookup(discover_captures(root, pattern=pattern, progress=progress))
