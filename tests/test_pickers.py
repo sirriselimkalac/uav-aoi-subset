@@ -232,11 +232,12 @@ def test_picker_that_cannot_open_is_a_usage_error(monkeypatch, capsys):
 
 
 def test_equivalent_command_quoting():
-    picked = [("ROOT", Path("/data/Saha Fotoğrafları")), ("SUBSET_CSV", Path("/a/b.csv"))]
+    root, csv = Path("/data/Saha Fotoğrafları"), Path("/a/b.csv")
     assert (
-        equivalent_command(["copy", "--dry-run", "--include", "**/*.csv"], picked)
-        == 'uav-aoi-subset copy "/data/Saha Fotoğrafları" "/a/b.csv" --dry-run --include '
-        '"**/*.csv"'
+        equivalent_command(
+            ["copy", "--dry-run", "--include", "**/*.csv"], [("ROOT", root), ("SUBSET_CSV", csv)]
+        )
+        == f'uav-aoi-subset copy "{root}" "{csv}" --dry-run --include "**/*.csv"'
     )
 
 

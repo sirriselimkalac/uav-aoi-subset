@@ -35,7 +35,7 @@ def test_parse_missing_and_invalid_values():
 
 def test_find_exiftool_missing(monkeypatch):
     monkeypatch.setattr(exif.shutil, "which", lambda name: None)
-    with pytest.raises(ExifToolNotFoundError, match="brew install exiftool"):
+    with pytest.raises(ExifToolNotFoundError, match="on PATH(?s:.*)exiftool -ver"):
         find_exiftool()
 
 
