@@ -43,10 +43,14 @@ Read the relevant `.m` file before implementing each command. Behaviour to prese
   In Python use ONE function for both, so matching is exact.
 - **Output names** are tied together: index → `<project>_image_index_YYYYMMDD.csv` in the
   project root; filter → `<aoi-name>_image_index_YYYYMMDD.csv` next to the KML;
-  copy → output folder named after that CSV.
-- **Folder flattening on copy.** Relative folder `A/B/C` becomes a single folder `A_B_C`
-  under the output root, so Pix4Dmapper gets a flat, easy-to-import structure (no chains
-  of single sub-folders). Name collisions get `_v02`, `_v03`… suffixes.
+  copy → a new `<project>_subset_NN` folder next to the project root (first free number, so
+  runs with different AOIs never write into each other; the user asked for this in
+  milestone 5, replacing MATLAB's "folder named after the CSV"); footprint → `<csv stem>.kml`.
+- **Flattening on copy.** Default `--layout flat` (the user's choice in milestone 5): every
+  file lands directly in the output folder, named after its folder chain
+  (`A/B/C/IMG_0000_1.tif` → `A_B_C_IMG_0000_1.tif`), so Pix4Dmapper gets one folder of
+  images. `--layout folders` keeps MATLAB's one folder per source folder (`A_B_C/IMG_…`).
+  Folder-name collisions get `_v02`, `_v03`… suffixes in both layouts.
 - **Summary report**: totals, not found, incomplete captures, files copied.
 - **KML coordinates** are `lon,lat[,alt]`; multiple polygons are combined with OR.
 
@@ -108,8 +112,10 @@ Known issues in the MATLAB version to fix:
 uav-aoi-subset index     ROOT [--bands 7] [--pattern ...] [--exclude DIR_GLOB ...] [--out CSV]
 uav-aoi-subset filter    INDEX_CSV --aoi AREA.kml|.kmz [--buffer METRES] [--out CSV]
 uav-aoi-subset copy      ROOT SUBSET_CSV [--dest DIR] [--mode copy|hardlink|move]
-                         [--dry-run] [--include FILE_GLOB ...] [--extra-captures ...]
-uav-aoi-subset footprint INDEX_CSV [--out KML]
+                         [--layout flat|folders] [--dry-run] [--include FILE_GLOB ...]
+                         [--extra-captures ...]
+uav-aoi-subset footprint INDEX_CSV [--out KML] [--hull convex|concave] [--ratio R]
+                         [--buffer METRES] [--per-folder [DEPTH]] [--overwrite]
 ```
 
 `copy` defaults: mode `copy`, skip files already present with the same size (resume),
@@ -146,7 +152,8 @@ Later: Docker image (secondary distribution), tkinter GUI, QGIS plugin, benchmar
 ## Status (update at the end of each milestone)
 
 Done: **1 scaffold**, **2 index** (CI green on ubuntu/macOS/windows × Python 3.11/3.12),
-**3 filter** (CI green on all 6 jobs, 94 tests), **4 copy** (CI green on all 6 jobs, 136 tests).
+**3 filter** (CI green on all 6 jobs, 94 tests), **4 copy** (CI green on all 6 jobs, 136 tests),
+**5 footprint** + copy `_subset_NN` / `--layout` (CI green on all 6 jobs, 183 tests).
 Package version is `0.0.1` until the v0.1.0 tag (milestone 8). Repo is private until then.
 
 Decisions made so far:
@@ -186,7 +193,8 @@ Decisions made so far:
   One `discover_captures` walk; match on `(NFC RelativeFolder, ImageBase.upper())`, MATLAB CSVs
   on exact NFC `RecordName` (2+ candidates → `ambiguous`, no fuzzy scoring). Extra captures are
   looked up WITHOUT `--exclude`. `assign_flat_folders`: sorted, case-insensitive collisions →
-  `_v02`. Default dest `<ROOT parent>/<ROOT name>_subsets/<CSV stem>`; refuses a non-empty dest
+  `_v02`. Default dest `<ROOT parent>/<ROOT name>_subset_NN` (first free number, compared
+  case-insensitively; resume = `--dest <that folder>`); refuses a non-empty dest
   without `OUTPUT_MARKER` and a dest that contains ROOT; warns if inside ROOT. Writes go to
   `<name>.uas-partial` then `replace`. Same size → `skipped-existing`; different size →
   `conflict` (exit 1) unless `--overwrite`. Hardlink: other drive (per-file `st_dev`) refused at
@@ -196,23 +204,51 @@ Decisions made so far:
   must be ≥ needed × 1.02 + 100 MB. All file-system calls go through `long_path` (`\\?\` on
   Windows); paths > 259 chars give a Pix4D warning. Report CSV columns `Kind, RecordName, Band,
   Source, Destination, Status, Bytes, Message`, written next to the dest with a timestamp; dry
-  runs write it only with `--report`.
+  runs write it only with `--report`. The marker file records Created / ROOT / Subset CSV.
+  `--layout flat` names = `flat_folder + "_" + original file name`; `_DestListing` finds
+  existing files by (prefix, BASE, band) by trying the pattern after every `_`, so resume and
+  move detection work in both layouts; any two tasks with the same destination (NFC,
+  casefold) → `CopyError` before anything is written.
+
+- Footprint (`core/footprint.py`, no files): hull in the local UTM zone (`convex_hull` or
+  `shapely.concave_hull(ratio, allow_holes=False)`, default ratio 0.3), corners mapped back to
+  the **original** lon/lat (dict lookup; reprojection only as fallback), so the KML used as an
+  AOI keeps every capture inside. < 3 distinct positions or hull area < 1 m² → `FootprintError`.
+  Buffer via `filter.buffer_metres` (can give a MultiPolygon). `group_by_folder(depth)` cuts
+  `RelativeFolder` to DEPTH parts (`(root)` for root captures; MATLAB CSVs → error).
+  `build_footprints` → `FootprintResult` (skipped groups listed; `combined_hectares` = union
+  area); `footprint_placemarks` gives one palette colour per area and an HTML-escaped
+  `<br>`-joined description (folder, captures, ha, hull, buffer, CSV name). Areas in ha via
+  `filter.area_hectares` (UTM). `filter.to_crs` is the shared reprojection helper.
+- KML writer (`core/kml.py`, reusable): ElementTree, `xmlns` KML 2.2, UTF-8 declaration,
+  `lon,lat,0`, closed rings, outer CCW / holes CW (`oriented`), coordinates as shortest
+  round-trip decimals (`np.format_float_positional(unique=True)`) → `load_aoi` reads back
+  exactly. `write_kml` opens with `xb` unless `overwrite=True`. CLI: output must end in `.kml`
+  (so the CSV can never be overwritten), existing KML needs `--overwrite`, `--ratio` only with
+  `--hull concave`, `--per-folder` without DEPTH = full folder (`const=0`).
 
 Validation prep is in place: `docs/VALIDATION.md` (work-computer checklist, covers milestones
-2–6), `docs/RELEASE.md` (README asset list + public gate), `scripts/compare_outputs.py`,
+2–6; footprint = V20–V20g, Pix4D flat-layout check = V50), `docs/RELEASE.md` (README asset list + public gate), `scripts/compare_outputs.py`,
 `.gitattributes` (LF in the repo, also for commits from Windows). Not yet run on real data.
 
-Next: milestone 5 (`footprint`). Watch out for:
-- Read `../CSV_TO_MINAREA_POLYGON_KML.m` first. It takes the convex hull of all valid lat/lon
-  (MATLAB projected to a local equirectangular plane first) and writes one KML polygon named
-  after the CSV, next to it (`<csv stem>.kml`).
-- Read the CSV with `read_index_csv` (MATLAB CSVs too); skip records without a position and
-  report how many; need ≥ 3 non-collinear points, else a clear error.
-- Core: a pure `footprint(records) -> Polygon` (shapely `convex_hull` on lon/lat is fine at field
-  scale; optionally a `--buffer` in metres via `filter.buffer_metres`) and a separate KML writer
-  (`lon,lat,0`, closed ring, counter-clockwise outer ring, `xmlns` KML 2.2, UTF-8). Keep the writer
-  reusable, and check the output loads with our own `load_aoi` (round-trip test).
-- Never overwrite the input CSV or an existing KML silently.
+Next: milestone 6 (picker fallback, progress bars, polished errors). Watch out for:
+- Pickers (tkinter `filedialog`) only when a required path is missing AND a display is
+  available (`DISPLAY`/`WAYLAND_DISPLAY` on Linux; always on macOS/Windows, but catch
+  `tkinter.TclError` and missing tkinter, e.g. uv's python-build-standalone on some Linux).
+  Otherwise keep the current argparse error. Positional paths become `nargs="?"`; keep pickers
+  in a separate front-end module (`pickers.py`), never in `core/`. Cancel → exit 1 with a short
+  message (MATLAB printed "İşlem iptal edildi"; ours in English). Mapping: index ROOT → folder;
+  filter INDEX_CSV + `--aoi` → files (`*.csv`, `*.kml *.kmz`); copy ROOT + SUBSET_CSV;
+  footprint INDEX_CSV. Test by monkeypatching the picker functions (no real dialogs in CI).
+- Progress: `_ConsoleProgress` already exists (stderr, TTY only). Decide whether to add a bar
+  with percentage/ETA (stdlib only, no new runtime dependency) and give footprint/filter a stage
+  if they ever get slow; keep `core/` emitting only `progress(stage, done, total)`.
+- Polished errors: walk every `error:` message in `cli.py` for a next step (what to do), check
+  Ctrl+C → clean message and exit 130 instead of a traceback (copy already removes partial
+  files), and `PermissionError` on output paths.
+- `docs/VALIDATION.md` V60 covers pickers; update it with the final behaviour in the same commit.
+- Open question for the work computer: does Pix4Dmapper group the 7 Altum-PT bands correctly
+  with the renamed flat files (V50)? If not, switch the default to `--layout folders`.
 
 ## Data and privacy rules
 
