@@ -50,6 +50,22 @@ Read the relevant `.m` file before implementing each command. Behaviour to prese
 - **Summary report**: totals, not found, incomplete captures, files copied.
 - **KML coordinates** are `lon,lat[,alt]`; multiple polygons are combined with OR.
 
+Real-world folder layout (Altum-PT, as seen on the author's campaign drives):
+
+```
+<CAMPAIGN>/                       project root; also holds calibration, Pix4D, flight-plan folders
+└─ <field photos>/Part1, Part2    created by hand
+   └─ 0000SET, 0001SET …          created by the camera, one per battery change
+      ├─ diag.dat, gpslog.dat …   camera logs (ignored)
+      └─ 000, 001 …               one per 1,400 files = 200 captures × 7 bands
+         └─ IMG_0000_1.tif …
+```
+
+IMG numbering restarts in every SET, so `IMG_####` alone is never unique: capture identity is
+always relative folder + base, at any nesting depth (other sensors may nest differently).
+Calibration-panel captures use the same naming in a sibling folder → `index --exclude`.
+Never put real campaign/project names in the repo.
+
 Known issues in the MATLAB version to fix:
 
 - ExifTool was launched once **per file** (very slow at 100k images) → batch it (see below).
@@ -89,7 +105,7 @@ Known issues in the MATLAB version to fix:
 ## CLI shape (target)
 
 ```
-uav-aoi-subset index     ROOT [--bands 7] [--pattern ...] [--out CSV]
+uav-aoi-subset index     ROOT [--bands 7] [--pattern ...] [--exclude DIR_GLOB ...] [--out CSV]
 uav-aoi-subset filter    INDEX_CSV --aoi AREA.kml|.kmz [--buffer METRES] [--out CSV]
 uav-aoi-subset copy      ROOT SUBSET_CSV [--dest DIR] [--mode copy|hardlink|move]
                          [--dry-run] [--include FILE_GLOB ...] [--extra-captures ...]
