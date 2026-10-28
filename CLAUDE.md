@@ -289,6 +289,15 @@ Next: milestone 6 (picker fallback, progress bars, polished errors). Watch out f
 
 ## Working style
 
+- **Public docs are brand-neutral.** README, CLI help and other user-facing text must not
+  name camera, drone or photogrammetry software brands (we cannot know the user's setup):
+  say "multispectral camera", "photogrammetry software", "GIS". File-name patterns such as
+  `IMG_0000_1.tif` are fine. Internal docs (this file, docs/VALIDATION.md, docs/RELEASE.md)
+  may name the author's own tools.
+- **`<!-- AUTHOR: ... -->` blocks in README.md are written by the user.** Never fill them
+  in, rewrite or delete them; keep them in place when restructuring the README.
+- The README section "Positional accuracy" was written with the user; keep its meaning
+  when editing (selection is by camera GNSS position at exposure, not image footprint).
 - Before each milestone, propose a short plan; implement in small commits.
 - Run `uv run ruff check`, `uv run ruff format`, `uv run pytest` before saying done.
 - Ask before deleting files or rewriting git history.
