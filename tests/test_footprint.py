@@ -182,6 +182,9 @@ def test_build_footprints_per_folder():
     assert [f for f, _ in result.skipped_groups] == ["Part2/0000SET"]
     assert result.total == 53 and len(result.no_position) == 1
     assert all(a.hectares > 0 for a in result.areas)
+    assert result.combined_hectares() == pytest.approx(sum(a.hectares for a in result.areas))
+    overlapping = build_footprints(grid(5, 5, folder="X") + grid(5, 5, folder="Y"), per_folder=True)
+    assert overlapping.combined_hectares() == pytest.approx(overlapping.areas[0].hectares)
 
     placemarks, styles = footprint_placemarks(result, "camp_image_index.csv")
     assert [s.line_color for s in styles] == PALETTE[:2]

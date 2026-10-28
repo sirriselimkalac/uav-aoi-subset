@@ -148,6 +148,10 @@ class FootprintResult:
     buffer: float
     skipped_groups: list[tuple[str, str]] = field(default_factory=list)  # (folder, reason)
 
+    def combined_hectares(self) -> float:
+        """Area covered by all polygons together; overlaps are counted once."""
+        return area_hectares(shapely.union_all([a.geometry for a in self.areas]))
+
 
 def build_footprints(
     records: Iterable[IndexRecord],

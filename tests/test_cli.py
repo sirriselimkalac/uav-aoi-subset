@@ -362,3 +362,127 @@ def test_copy_folders_layout(copy_inputs, tmp_path, capsys):
     assert main(["copy", str(root), str(subset), "--dest", str(dest), "--layout", "folders"]) == 0
     assert (dest / "Saha_Fotoğrafları_Part2_0000SET_000" / "IMG_0000_1.tif").is_file()
     assert "Layout:             folders" in capsys.readouterr().out
+
+
+# --- footprint ----------------------------------------------------------------------------
+
+
+def _grid_records(folder: str, lon0: float, n: int = 4) -> list[IndexRecord]:
+    step = 0.0002
+    return [
+        IndexRecord(
+            record_name=f"{folder.replace('/', '_')}_IMG_{i * n + j:04d}",
+            complete=True,
+            latitude=50.0 + j * step,
+            longitude=lon0 + i * step,
+            altitude=None,
+            capture_time=None,
+            bands_found=(1, 2, 3, 4, 5, 6, 7),
+            missing_bands=(),
+            relative_folder=folder,
+            image_base=f"IMG_{i * n + j:04d}",
+        )
+        for i in range(n)
+        for j in range(n)
+    ]
+
+
+@pytest.fixture
+def footprint_csv(tmp_path):
+    records = [
+        *_grid_records("Saha Fotoğrafları/Part1/0000SET/000", 10.0),
+        *_grid_records("Saha Fotoğrafları/Part1/0000SET/001", 10.001),
+        *_grid_records("Saha Fotoğrafları/Part1/0001SET/000", 10.003),
+        _record("P_IMG_0099", None, None),
+    ]
+    path = tmp_path / "Kampanya_image_index_20261028.csv"
+    write_index_csv(records, path)
+    return path, records
+
+
+def test_footprint_end_to_end(footprint_csv, capsys):
+    csv_path, records = footprint_csv
+    assert main(["footprint", str(csv_path)]) == 0
+    kml = csv_path.with_suffix(".kml")
+    out = capsys.readouterr().out
+    assert "Captures in CSV:    49" in out
+    assert "without GPS:      1" in out and "P_IMG_0099" in out
+    assert "Hull:               convex" in out and " ha" in out
+    assert f"Footprint written to: {kml}" in out
+
+    # The footprint works as an AOI for 'filter' and keeps every located capture.
+    subset = csv_path.parent / "subset.csv"
+    assert main(["filter", str(csv_path), "--aoi", str(kml), "--out", str(subset)]) == 0
+    assert len(read_index_csv(subset)) == 48
+
+
+def test_footprint_never_overwrites_silently(footprint_csv, capsys):
+    csv_path, _ = footprint_csv
+    kml = csv_path.with_suffix(".kml")
+    kml.write_text("keep", encoding="utf-8")
+    assert main(["footprint", str(csv_path)]) == 1
+    assert "--overwrite" in capsys.readouterr().err
+    assert kml.read_text(encoding="utf-8") == "keep"
+    assert main(["footprint", str(csv_path), "--overwrite"]) == 0
+    assert kml.read_text(encoding="utf-8").startswith("<?xml")
+
+
+def test_footprint_refuses_to_write_over_the_csv(footprint_csv, capsys):
+    csv_path, _ = footprint_csv
+    before = csv_path.read_bytes()
+    assert main(["footprint", str(csv_path), "--out", str(csv_path), "--overwrite"]) == 1
+    assert ".kml" in capsys.readouterr().err
+    assert csv_path.read_bytes() == before
+
+
+def test_footprint_options(footprint_csv, tmp_path, capsys):
+    csv_path, _ = footprint_csv
+    out = tmp_path / "flights.kml"
+    args = ["footprint", str(csv_path), "--out", str(out), "--hull", "concave", "--ratio", "0.5"]
+    assert main([*args, "--buffer", "15", "--per-folder", "3"]) == 0
+    text = capsys.readouterr().out
+    assert "Hull:               concave (ratio 0.5)" in text
+    assert "Buffer:             15 m" in text
+    assert "Polygons:           2" in text
+    assert "Saha Fotoğrafları/Part1/0000SET: 32" in text
+    kml = out.read_text(encoding="utf-8")
+    assert kml.count("<Placemark>") == 2 and "<Folder>" in kml
+
+    assert main(["footprint", str(csv_path), "--out", str(out), "--per-folder", "--overwrite"]) == 0
+    assert "Polygons:           3" in capsys.readouterr().out
+
+
+def test_footprint_reads_matlab_csv(tmp_path, capsys):
+    matlab = tmp_path / "matlab.csv"
+    matlab.write_text(
+        "RecordName,Complete,GPSLatitude,GPSLongitude\n"
+        "A_IMG_0001,1,50.0,10.0\nA_IMG_0002,1,50.0,10.001\n"
+        "A_IMG_0003,1,50.001,10.0\nA_IMG_0004,1,NaN,NaN\n",
+        encoding="utf-8",
+    )
+    assert main(["footprint", str(matlab)]) == 0
+    assert (tmp_path / "matlab.kml").is_file()
+    assert "without GPS:      1" in capsys.readouterr().out
+
+    assert main(["footprint", str(matlab), "--per-folder", "--out", str(tmp_path / "f.kml")]) == 1
+    assert "RelativeFolder" in capsys.readouterr().err
+
+
+def test_footprint_rejects_bad_arguments(footprint_csv, tmp_path, capsys):
+    csv_path, _ = footprint_csv
+    assert main(["footprint", str(tmp_path / "nope.csv")]) == 1
+    assert main(["footprint", str(csv_path), "--ratio", "0.5"]) == 1
+    assert main(["footprint", str(csv_path), "--hull", "concave", "--ratio", "0"]) == 1
+    assert main(["footprint", str(csv_path), "--per-folder", "-1"]) == 1
+    err = capsys.readouterr().err
+    assert "not a file" in err and "only applies" in err and "at most 1" in err
+    assert "DEPTH" in err
+    assert not csv_path.with_suffix(".kml").exists()
+
+
+def test_footprint_too_few_positions(tmp_path, capsys):
+    path = tmp_path / "two.csv"
+    write_index_csv([_record("P_IMG_0000", 10.0, 50.0), _record("P_IMG_0001", 10.1, 50.0)], path)
+    assert main(["footprint", str(path)]) == 1
+    assert "at least 3" in capsys.readouterr().err
+    assert not path.with_suffix(".kml").exists()

@@ -27,6 +27,15 @@ from uav_aoi_subset.core.copy import (
 from uav_aoi_subset.core.discovery import DEFAULT_PATTERN
 from uav_aoi_subset.core.exif import ExifToolError, ExifToolNotFoundError, ExifToolReader
 from uav_aoi_subset.core.filter import buffer_metres, default_subset_path, filter_records
+from uav_aoi_subset.core.footprint import (
+    DEFAULT_RATIO,
+    HULLS,
+    FootprintError,
+    FootprintResult,
+    build_footprints,
+    default_footprint_path,
+    footprint_placemarks,
+)
 from uav_aoi_subset.core.index import (
     DEFAULT_BANDS,
     IndexRecord,
@@ -36,6 +45,7 @@ from uav_aoi_subset.core.index import (
     read_index_csv,
     write_index_csv,
 )
+from uav_aoi_subset.core.kml import write_kml
 
 # How many incomplete captures / missing positions to list in the summary.
 LIST_LIMIT = 20
@@ -201,9 +211,58 @@ def build_parser() -> argparse.ArgumentParser:
         "--exclude'd folders.",
     )
 
-    p_footprint = sub.add_parser("footprint", help="Write the convex hull of all captures as KML.")
-    p_footprint.add_argument("index_csv", type=Path, metavar="INDEX_CSV")
-    p_footprint.add_argument("--out", type=Path, metavar="KML", help="Output KML path.")
+    p_footprint = sub.add_parser(
+        "footprint",
+        help="Write the outline of all capture positions as a KML polygon.",
+        description="Write the hull of the capture positions in INDEX_CSV as a KML polygon for "
+        "Google Earth. The positions are capture centres: the imaged ground reaches further, "
+        "which --buffer can approximate. The KML can be used as an AOI for 'filter'.",
+    )
+    p_footprint.add_argument(
+        "index_csv",
+        type=Path,
+        metavar="INDEX_CSV",
+        help="Index or subset CSV (MATLAB index CSVs work too, except with --per-folder).",
+    )
+    p_footprint.add_argument(
+        "--out",
+        type=Path,
+        metavar="KML",
+        help="Output KML path (default: next to the CSV, <CSV name>.kml).",
+    )
+    p_footprint.add_argument(
+        "--hull",
+        choices=HULLS,
+        default="convex",
+        help="convex (default, like the MATLAB tool) or concave: follows L-shaped or "
+        "scattered flights more closely.",
+    )
+    p_footprint.add_argument(
+        "--ratio",
+        type=float,
+        metavar="R",
+        help=f"Concave hull tightness, 0 < R <= 1: smaller is tighter, 1 equals convex "
+        f"(default {DEFAULT_RATIO:g}).",
+    )
+    p_footprint.add_argument(
+        "--buffer",
+        type=float,
+        default=0.0,
+        metavar="METRES",
+        help="Grow the outline by this many metres (negative shrinks it).",
+    )
+    p_footprint.add_argument(
+        "--per-folder",
+        type=int,
+        nargs="?",
+        const=0,
+        metavar="DEPTH",
+        help="One polygon per capture folder instead of one for everything. With DEPTH, "
+        "folders are combined at that many levels below ROOT (e.g. 2 for Part1/0000SET).",
+    )
+    p_footprint.add_argument(
+        "--overwrite", action="store_true", help="Replace the output KML if it exists."
+    )
 
     return parser
 
@@ -518,6 +577,89 @@ def _run_copy(args: argparse.Namespace) -> int:
     return 1 if st["conflict"] or st["failed"] else 0
 
 
+def _footprint_args_ok(args: argparse.Namespace, out: Path) -> bool:
+    if not args.index_csv.is_file():
+        print(f"error: not a file: {args.index_csv}", file=sys.stderr)
+        return False
+    if args.ratio is not None and args.hull != "concave":
+        print("error: --ratio only applies to --hull concave", file=sys.stderr)
+        return False
+    if args.ratio is not None and not 0 < args.ratio <= 1:
+        print("error: --ratio must be greater than 0 and at most 1", file=sys.stderr)
+        return False
+    if args.per_folder is not None and args.per_folder < 0:
+        print("error: --per-folder DEPTH must be at least 1", file=sys.stderr)
+        return False
+    if out.suffix.lower() != ".kml":
+        print(f"error: the output must be a .kml file: {out}", file=sys.stderr)
+        return False
+    if out.exists() and not args.overwrite:
+        print(f"error: {out} exists; add --overwrite to replace it", file=sys.stderr)
+        return False
+    return True
+
+
+def _print_footprint_summary(result: FootprintResult, per_folder: bool) -> None:
+    used = result.total - len(result.no_position)
+    print(f"Captures in CSV:    {result.total}")
+    print(f"  without GPS:      {len(result.no_position)} (left out)")
+    print(f"  used:             {used}")
+    hull = result.hull + (f" (ratio {result.ratio:g})" if result.hull == "concave" else "")
+    print(f"Hull:               {hull}")
+    if result.buffer:
+        print(f"Buffer:             {result.buffer:g} m")
+    if per_folder:
+        skipped = f" ({len(result.skipped_groups)} skipped)" if result.skipped_groups else ""
+        print(f"Polygons:           {len(result.areas)}{skipped}")
+        print(f"Combined area:      {result.combined_hectares():.2f} ha")
+        _list_some(
+            "Polygons (folder: captures, area)",
+            [f"{a.name}: {a.captures}, {a.hectares:.2f} ha" for a in result.areas],
+        )
+        _list_some("Folders skipped", [f"{f}: {why}" for f, why in result.skipped_groups])
+    else:
+        print(f"Area:               {result.areas[0].hectares:.2f} ha")
+    _list_some("Captures without a GPS position", [r.record_name for r in result.no_position])
+
+
+def _run_footprint(args: argparse.Namespace) -> int:
+    index_csv: Path = args.index_csv
+    out: Path = args.out or default_footprint_path(index_csv)
+    if not _footprint_args_ok(args, out):
+        return 1
+    per_folder = args.per_folder is not None
+    try:
+        records = read_index_csv(index_csv)
+        result = build_footprints(
+            records,
+            name=index_csv.stem,
+            hull=args.hull,
+            ratio=DEFAULT_RATIO if args.ratio is None else args.ratio,
+            buffer=args.buffer,
+            per_folder=per_folder,
+            depth=args.per_folder or None,
+        )
+        placemarks, styles = footprint_placemarks(result, index_csv.name)
+        write_kml(
+            out,
+            placemarks,
+            document_name=index_csv.stem,
+            styles=styles,
+            folder_name="Folders" if per_folder else None,
+            overwrite=args.overwrite,
+        )
+    except FileExistsError:
+        print(f"error: {out} exists; add --overwrite to replace it", file=sys.stderr)
+        return 1
+    except (FootprintError, ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    _print_footprint_summary(result, per_folder)
+    print(f"\nFootprint written to: {out}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     # Folder names may contain characters the console code page cannot show (Windows).
     for stream in (sys.stdout, sys.stderr):
@@ -534,5 +676,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_filter(args)
     if args.command == "copy":
         return _run_copy(args)
+    if args.command == "footprint":
+        return _run_footprint(args)
     print(f"uav-aoi-subset {args.command}: not implemented yet.", file=sys.stderr)
     return 2
