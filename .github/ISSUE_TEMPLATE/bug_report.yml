@@ -1,0 +1,99 @@
+name: Bug report
+description: Something did not work as expected (an error, a wrong count, a file your software cannot open).
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a problem.
+
+        **Privacy: do not share coordinates, imagery, real project or field names, or private
+        folder paths.** Replace them with placeholders such as `D:\survey\...` or `<field A>`
+        before you paste. Counts, error messages and file names like `IMG_0000_1.tif` are
+        enough. Issues are public.
+
+  - type: textarea
+    id: version
+    attributes:
+      label: Output of `uav-aoi-subset --version`
+      description: Program, Python and ExifTool versions.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: Operating system version
+      placeholder: e.g. Windows 11 23H2, macOS 15.1, Ubuntu 24.04
+    validations:
+      required: false
+
+  - type: input
+    id: camera
+    attributes:
+      label: Camera (optional)
+      description: Model and firmware version, if you know them. Helps with file names, band counts and GPS tags.
+    validations:
+      required: false
+
+  - type: input
+    id: software
+    attributes:
+      label: Photogrammetry or GIS software (optional)
+      description: Name and version, if the problem shows up there (for example an import problem).
+    validations:
+      required: false
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command you ran
+      description: The full command line, with private paths replaced by placeholders.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: Everything the command printed. For an unexpected error, run it again with `--debug` and paste the traceback too.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Anything else (optional)
+      description: Folder layout (for example `Part1/0000SET/000/IMG_0000_1.tif`), file counts, what you already tried.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed coordinates, imagery, real project names and private paths from this report.
+          required: true
