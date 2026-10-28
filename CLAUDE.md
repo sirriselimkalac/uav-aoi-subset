@@ -137,7 +137,8 @@ Later: Docker image (secondary distribution), tkinter GUI, QGIS plugin, benchmar
 
 ## Status (update at the end of each milestone)
 
-Done: **1 scaffold**, **2 index** (CI green on ubuntu/macOS/windows × Python 3.11/3.12).
+Done: **1 scaffold**, **2 index** (CI green on ubuntu/macOS/windows × Python 3.11/3.12),
+**3 filter** (local tests green; check CI after the push).
 Package version is `0.0.1` until the v0.1.0 tag (milestone 8). Repo is private until then.
 
 Decisions made so far:
@@ -160,16 +161,26 @@ Decisions made so far:
 - Tests: synthetic TIFFs from `tests/synthetic.py` (`ALTUM_LAYOUT` mirrors the real tree,
   `write_gps` uses exiftool); `requires_exiftool` marker skips tests when exiftool is absent.
 
-Next: milestone 3 (`filter`). Watch out for:
-- Add `shapely` and `pyproj` only now. Keep the KML/KMZ loader (`core/aoi.py`) separate from
-  the geometry-based filter.
-- Parse `Polygon` outer/inner boundaries and `MultiGeometry`; ignore LineStrings and Points.
-  KMZ = zip, its main KML is usually `doc.kml`. Handle the KML namespace.
-- Buffer in metres via local UTM (pyproj), then back to WGS84.
-- Output `<aoi-name>_image_index_YYYYMMDD.csv` next to the KML. Keep every input column.
-  Rows without a position are never inside; report how many there were.
-- Points exactly on the boundary: decide on purpose (MATLAB `inpolygon` counts them as
-  inside → use `covers`, not `contains`) and test it.
+- AOI (`core/aoi.py`): only `Polygon` elements are areas (outer = shell, inner = holes), at any
+  depth incl. `MultiGeometry`; combined with `union_all`. LineStrings/Points/loose LinearRings
+  are ignored and counted. Namespace-agnostic (match on local tag name; `ET.iter` has no
+  `{*}`). KMZ read in memory: root `doc.kml`, else first root `.kml`, else any. Invalid
+  polygons → `make_valid` + warning. No polygon → `AOIError`.
+- Filter (`core/filter.py`, geometry only, no files): `shapely.intersects_xy` → **boundary
+  counts as inside** (like MATLAB `inpolygon`). Records without GPS are never inside and are
+  reported. `buffer_metres` uses the UTM zone of the AOI centroid; negative shrinks, an empty
+  result raises `ValueError`.
+- Subset CSV = same columns/writer as the index CSV, named `<sanitize_token(AOI stem)>_image_index_
+  YYYYMMDD.csv` next to the AOI. `filter` refuses to overwrite its input; an empty result
+  still writes a header-only CSV (exit 0, warning). Runtime deps: shapely, pyproj, numpy.
+
+Next: milestone 4 (`copy`). Watch out for:
+- Read the subset with `read_index_csv`; locate band files via `RelativeFolder` + `ImageBase`
+  (fall back to matching `record_name` from `discover_captures` for MATLAB CSVs that lack them).
+- Flatten with `flat_folder_name`; collisions → `_v02`, `_v03`. Default dest outside ROOT, and
+  drop the `OUTPUT_MARKER` file in it. Resume = skip same-size files; never overwrite silently;
+  `move` needs an explicit flag. CSV report next to the output.
+- Read `../COPY_GEOTIFFS_FROM_CSV.m` first.
 
 ## Data and privacy rules
 
