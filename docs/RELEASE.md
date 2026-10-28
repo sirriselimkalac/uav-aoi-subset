@@ -2,8 +2,9 @@
 
 The repository becomes public **only** when:
 
-1. every check in [VALIDATION.md](VALIDATION.md) has passed on the work computer, on the commit
-   that will be tagged (or on an earlier commit, with the later fixes re-validated there);
+1. every check in [VALIDATION.md](VALIDATION.md) (all five phases) has passed on the work
+   computer, on the commit that will be tagged (or on an earlier commit, with the later fixes
+   re-validated there), and every issue opened during validation is closed;
 2. the assets in section A are committed;
 3. the README is complete (section B).
 
@@ -12,8 +13,9 @@ Untested code is never made public.
 ## A. Assets to prepare on the work computer
 
 Prepare these **after** all validation checks have passed, so the screenshots show the final
-version. Commit them from the work computer (VALIDATION.md, section 9) before the clone there
-is deleted.
+version. Commit them from the work computer (VALIDATION.md, *Finish and clean up*) before the
+clone there is deleted. Assets come from the public blueberry dataset only (Phases 2–3), never
+from the real campaign data of Phases 4–5.
 
 ### A1. Example AOI files: `examples/`
 

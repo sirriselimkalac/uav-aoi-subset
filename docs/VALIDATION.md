@@ -6,34 +6,88 @@ machine that has real imagery. The Mac (development machine) only ever sees synt
 The repository stays **private until every check below has passed** on the commit that will
 become v0.1.0, and the README assets in [RELEASE.md](RELEASE.md) are committed.
 
+The validation runs in five phases, in this order:
+
+| Phase | What | Data | Goes into the repo |
+|---|---|---|---|
+| 1 | Install like an ordinary user, **README only** | none | snag log, numbers |
+| 2 | Every command on the public blueberry dataset (V1–V69) | blueberry | numbers, example KMLs, screenshots |
+| 3 | Same data, unusual KMLs (V70–V73) | blueberry | numbers |
+| 4 | Real campaign data (V80–V87) | private | **anonymous numbers only** |
+| 5 | Real data with ROOT one level too high (V90–V93) | private | **anonymous numbers only** |
+
 The clone on the work computer is **temporary**. When validation and the README assets are
-done, it is deleted (section 9). Only the Mac copy remains. So:
+done, it is deleted (*Finish and clean up*). Only the Mac copy remains. So:
 
 - everything worth keeping (results, KMLs, screenshots) must be **committed and pushed** from
   here before the clone is removed;
-- data and outputs live **outside** the clone (in `C:\uav-demo\data` and `C:\uav-demo\results`),
-  so `git status` only ever shows files meant for the repo.
+- data and outputs live **outside** the clone (in `C:\uav-demo\data`, `C:\uav-demo\results`
+  and, for Phases 4–5, `C:\uav-demo\private`), so `git status` only ever shows files meant for
+  the repo.
 
-If a check fails: write it down in the results table (section 10), commit and push the results,
-fix it on the Mac, then `git pull` here and run the failed check and everything after it again.
-Do not delete the clone while any check is open.
+## How to report a finding
 
-Dataset: EagleNXT *"Altum-PT data of a blueberry field"*. It has 480 captures × 7 bands =
-3,360 TIFFs plus one calibration-panel reflectance CSV. It is public, but it is **never**
-committed or redistributed; the README only links to it.
+Every failed check or snag becomes a GitHub issue, opened with the **Bug report** form
+(*Issues → New issue*). The form asks for `--version`, the command and its output. Put the issue
+number into the results table. Then commit and push the results, fix it on the Mac, `git pull`
+here and run the failed check and everything after it again. Do not delete the clone while any
+check or issue is open.
+
+Issues become public together with the repository, so the same privacy rules apply as for the
+results: **no coordinates, no imagery, no campaign or field names, no work paths, no
+screenshots of real data.** Replace paths with placeholders (`D:\<campaign>\...`).
+
+Dataset for Phases 2–3: EagleNXT *"Altum-PT data of a blueberry field"*. It has 480 captures ×
+7 bands = 3,360 TIFFs plus one calibration-panel reflectance CSV. It is public, but it is
+**never** committed or redistributed; the README only links to it.
 
 ---
 
-## 0. Before you start
+## Phase 1: install like an ordinary user (README only)
+
+The goal is to find out whether someone who has only the README can install the tool on a
+normal Windows computer. So:
+
+- **Do not read further in this file until Phase 1 is done.** Open only the README (on GitHub,
+  in the browser) and follow its *Installation* section exactly, as a new user would. Do not
+  use knowledge from this file or from the development work.
+- Where the README lets you choose a folder, use `C:\uav-demo\phase1`.
+- Keep a **snag log** while you go: every time something does not work at once, or the README
+  is unclear, write one row. Afterwards copy it into the Phase 1 results.
+
+  | Step | What I expected | What happened | How I solved it | Time (min) |
+  |---|---|---|---|---|
+  | e.g. install uv | the script installs uv | "running scripts is disabled" | used `winget` route | 5 |
+
+- Open an issue for every snag that needs a change in the README or the code.
+
+| ID | Check | Expected |
+|---|---|---|
+| P1 | Start state, before installing anything: Windows version; admin rights or not; `winget --version`; `Get-ExecutionPolicy -List`; are `git`, `uv`, `exiftool`, `py` already found? | noted in the results (yes/no answers only) |
+| P2 | README step 1: uv | `uv --version` works in a new window; note the route used (script / winget / pip / ZIP) and the minutes |
+| P3 | README step 2: ExifTool | `exiftool -ver` works in a new window, or the README's `--exiftool` route is used; note the route and the minutes |
+| P4 | README step 3: get the tool (Git or ZIP) and `uv sync` | no errors; note the route and the minutes |
+| P5 | `uv run uav-aoi-subset --version` | three lines, the last one `ExifTool <version> at <path>`; note the total minutes since P1 |
+| P6 | `uv run uav-aoi-subset --help` and `uv run uav-aoi-subset index --help` in a normal PowerShell window | readable, no broken characters; the README *Usage* section matches |
+| P7 | Optional: `uv tool install .`, new window, `uav-aoi-subset --version` in another folder | works from any folder |
+
+Only now continue with Phase 2.
+
+---
+
+## Phase 2: blueberry dataset
+
+These are the original checks V1–V69. Their IDs are unchanged.
+
+### 2.0 Before you start
 
 - [ ] On GitHub, check the latest commit on `main` and its CI status (green on all 6 jobs).
-- [ ] Read the *Status* section of `CLAUDE.md`. Sections marked *(milestone 6)* can only be
-      checked once that milestone is done. It is best to come to the work computer when
-      milestones 1–6 are all done, so one visit covers everything.
+- [ ] Read the *Status* section of `CLAUDE.md`.
 
-## 1. Setup (once)
+### 2.1 Setup (once)
 
-PowerShell (not admin):
+PowerShell (not admin). Skip the tools Phase 1 already installed; Git is needed from here on
+(results are pushed from this clone), even if Phase 1 used the ZIP route:
 
 ```powershell
 # Tools. If winget is blocked, use the installers from the websites instead.
@@ -50,7 +104,7 @@ Folders and console encoding (run these at the start of every PowerShell session
 $Demo = "C:\uav-demo"                      # short ASCII path, no user name in screenshots
 $Repo = "$Demo\uav-aoi-subset"
 $Data = "$Demo\data\blueberry"             # the extracted dataset: the folder that holds its image folders
-$Aoi  = "$Demo\aoi"                        # KMLs drawn in Google Earth
+$Aoi  = "$Demo\aoi"                        # KMLs drawn in Google Earth (blueberry only)
 $Res  = "$Demo\results"                    # every output of the checks
 New-Item -ItemType Directory -Force $Demo, "$Demo\data", $Aoi, $Res | Out-Null
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
@@ -59,7 +113,7 @@ function aoi { uv run --project $Repo uav-aoi-subset @args }   # short alias
 ```
 
 Clone and sign in. The repository is private: on the first clone, Git Credential Manager opens a
-browser window to sign in to GitHub. Section 9 removes the stored credentials again.
+browser window to sign in to GitHub. *Finish and clean up* removes the stored credentials again.
 
 ```powershell
 cd $Demo
@@ -79,7 +133,7 @@ Download the dataset (note the size of the ZIP file for the results table; the R
 Get-ChildItem $Data -Recurse -Directory | Select-Object FullName      # note the folder layout
 ```
 
-## 2. Unit tests on this machine
+### 2.2 Unit tests on this machine
 
 | ID | Step | Expected |
 |---|---|---|
@@ -88,7 +142,7 @@ Get-ChildItem $Data -Recurse -Directory | Select-Object FullName      # note the
 | V3 | `Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem -Name LongPathsEnabled` | note the value (0 or 1); it matters for V41 |
 | V4 | `aoi --version` | three lines: program version, Python version and Windows version, `ExifTool <version> at <path>`; copy Python and ExifTool into the results table header |
 
-## 3. index
+### 2.3 index
 
 ```powershell
 Measure-Command { aoi index $Data --out "$Res\ours_index.csv" | Out-Default }
@@ -96,13 +150,13 @@ Measure-Command { aoi index $Data --out "$Res\ours_index.csv" | Out-Default }
 
 | ID | Check | Expected |
 |---|---|---|
-| V10 | Summary | 480 captures, all complete, 480 with GPS, no ExifTool warnings. Write down the time. |
+| V10 | Summary | 480 captures, all complete, 480 with GPS, no extra copies, no *Folders not scanned*, no ExifTool warnings. Write down the time. |
 | V11 | Open `ours_index.csv` in Excel (double-click) | Note whether the columns split correctly. With a Turkish locale Excel may expect `;`. Turkish characters must display correctly. |
 | V12 | Turkish path: `Copy-Item -Recurse $Data "$Demo\data\Saha Fotoğrafları – deneme"`, then `aoi index "$Demo\data\Saha Fotoğrafları – deneme" --out "$Res\tr_index.csv"` | same numbers as V10 |
 | V13 | ExifTool not on PATH: `aoi index $Data --out "$Res\x.csv" --exiftool "<full path to exiftool.exe>"` with a PATH without ExifTool (`$env:Path = ($env:Path -split ';' \| ? { $_ -notmatch 'exiftool' }) -join ';'`) | works with `--exiftool`; without it, a clear "ExifTool was not found on PATH" error that lists only the **Windows** install steps (installer, or rename `exiftool(-k).exe`), exit code 1, no traceback. Open a new window afterwards. |
 | V14 | If the dataset contains calibration-panel captures in their own folder: `aoi index $Data --exclude "<panel folder>" --out "$Res\nopanel.csv"` | panel captures left out |
 
-## 4. footprint
+### 2.4 footprint
 
 ```powershell
 aoi footprint "$Res\ours_index.csv" --out "$Aoi\blueberry_footprint.kml"
@@ -120,12 +174,12 @@ Keep the merged-area KML you made earlier with Pix4D **outside the clone** (for 
 | V20a | `--hull concave` | area smaller than or equal to V20; the outline follows the flight lines (no large empty corners). If it cuts into the field, try `--ratio 0.5` and note which ratio fits best. |
 | V20b | `--buffer 20` | outline about 20 m outside V20 everywhere (Google Earth ruler) |
 | V20c | Open V20, V20b and the Pix4D merged-area KML together | visual comparison: the Pix4D area (the imaged ground) should lie around the V20 outline; note roughly which buffer (V20b or another value) matches the Pix4D area best |
-| V20d | `--per-folder` | one coloured polygon per image folder; the polygon list in the summary adds up to 480 captures. Re-run with `--per-folder 2` (or the depth of the flight folders, see the folder layout noted in section 1) for one polygon per flight. |
+| V20d | `--per-folder` | one coloured polygon per image folder; the polygon list in the summary adds up to 480 captures. Re-run with `--per-folder 2` (or the depth of the flight folders, see the folder layout noted in 2.1) for one polygon per flight. |
 | V20e | `aoi filter "$Res\ours_index.csv" --aoi "$Aoi\blueberry_footprint.kml" --out "$Res\fp_subset.csv"` | 480 captures inside (the footprint as an AOI keeps every capture) |
 | V20f | Run the first command again | refused: the KML exists, add `--overwrite` |
-| V20g | `aoi footprint "$Res\matlab_index.csv" --out "$Res\matlab_footprint.kml"` (after section 7) | same polygon as V20 when both are opened in Google Earth |
+| V20g | `aoi footprint "$Res\matlab_index.csv" --out "$Res\matlab_footprint.kml"` (after 2.7) | same polygon as V20 when both are opened in Google Earth |
 
-## 5. Draw the AOIs in Google Earth Pro
+### 2.5 Draw the AOIs in Google Earth Pro
 
 Draw these in a **new, empty folder** under *Temporary Places* (not *My Places*), then right-click
 the folder → *Save Place As… → KML*. They become the public examples (see RELEASE.md).
@@ -138,7 +192,7 @@ the folder → *Save Place As… → KML*. They become the public examples (see 
 Tip: *File → Import* of `ours_index.csv` (latitude/longitude columns) shows the capture
 positions as points, which helps with drawing and with V21–V24.
 
-## 6. filter
+### 2.6 filter
 
 ```powershell
 aoi filter "$Res\ours_index.csv" --aoi "$Aoi\blueberry_aoi_north.kml"
@@ -155,7 +209,7 @@ $North = Get-ChildItem "$Aoi\blueberry_aoi_north_image_index_*.csv" | Select-Obj
 | V23 | KMZ | same count as V21 |
 | V24 | buffer 10 m | count ≥ V21 |
 
-## 7. Compare with the MATLAB scripts
+### 2.7 Compare with the MATLAB scripts
 
 Use the MATLAB scripts already on the work computer. They are not in this repository; if they
 are missing, bring them over privately (never through the repository).
@@ -183,7 +237,7 @@ uv run python scripts\compare_outputs.py csv $North.FullName "$Res\matlab_north.
 | V26 | subset comparison | `RESULT: SAME` |
 | V27 | Time: ours (V10) vs. MATLAB index | write both down (README benchmark) |
 
-## 8. copy
+### 2.8 copy
 
 ```powershell
 $Dest = "$Demo\data\blueberry_subset_01"     # the default destination of the first run
@@ -211,7 +265,7 @@ aoi copy $Data $North.FullName --dry-run
 | V45 | exFAT/FAT32 stick (optional): put a small subset folder on the stick as ROOT, index it, then `--mode hardlink` with a `--dest` on the stick | stops with the "may not support hard links … use --mode copy" message; no fallback to copying |
 | V46 | Cross-drive move (optional, disposable copy as in V39, `--dest` on the other drive) | all moved; sources deleted only after each file is complete |
 
-## 8b. Pix4Dmapper
+### 2.8b Pix4Dmapper
 
 | ID | Check | Expected |
 |---|---|---|
@@ -219,7 +273,7 @@ aoi copy $Data $North.FullName --dry-run
 | V51 | Map view | camera positions lie inside the AOI |
 | V52 | Optional: run step 1 (Initial Processing) | completes; calibration panel detected if included (V42) |
 
-## 8c. Pickers, progress and errors *(milestone 6)*
+### 2.8c Pickers, progress and errors
 
 Pickers open only when a required path is missing **and** the command runs interactively
 (PowerShell window, stdin not redirected). Close any Excel window holding a result CSV first,
@@ -238,16 +292,76 @@ except in V69.
 | V68 | `aoi index $Data --out "$Res\x.csv"`, press Ctrl+C during "Reading GPS" | "Interrupted.", `$LASTEXITCODE` = 130, no traceback |
 | V69 | Open `$Res\fp_subset.csv` in Excel, then run the V20e command again (same `--out`) | "cannot write …: permission denied" with the hint to close the file or use `--out`; exit 1, no traceback. Close Excel afterwards. |
 
-## 9. Finish and clean up (only when every check has passed)
+---
+
+## Phase 3: same data, different KMLs
+
+Blueberry data, `$Res\ours_index.csv` from V10. Keep these KMLs in `$Aoi`; they are not public
+examples.
+
+| ID | Check | Expected |
+|---|---|---|
+| V70 | **KML exported from QGIS.** In QGIS, load `$Aoi\blueberry_aoi_north.kml` (or draw the same area as a polygon layer), then *Export → Save Features As… → KML* to `$Aoi\north_qgis.kml`. `aoi filter "$Res\ours_index.csv" --aoi "$Aoi\north_qgis.kml" --out "$Res\north_qgis.csv"` | read without AOI warnings (QGIS writes `MultiGeometry`, `ExtendedData` and a schema; all fine); same captures inside as V21 when it is the same polygon (`compare_outputs.py csv` against the V21 subset reports no differences) |
+| V71 | **Area drawn as a line.** In Google Earth, draw the outline of the field with *Add Path* (not *Add Polygon*), save as `$Aoi\north_line.kml`, then `aoi filter "$Res\ours_index.csv" --aoi "$Aoi\north_line.kml" --out "$Res\line.csv"` | exit code 1, `error: …: no usable Polygon found. Draw the area with … 'Add Polygon' tool; paths (LineStrings) and placemarks (Points) are not areas.` plus the next step; `Test-Path "$Res\line.csv"` is `False`; no traceback |
+| V72 | **Polygon away from the flight.** Draw a polygon a few km away, save as `$Aoi\elsewhere.kml`; `aoi filter "$Res\ours_index.csv" --aoi "$Aoi\elsewhere.kml" --out "$Res\elsewhere.csv"`; then `aoi copy $Data "$Res\elsewhere.csv" --dry-run` | filter: exit 0, `inside the AOI:   0`, the warning "no capture lies inside the AOI …", a CSV with only the header row. copy: 0 files to copy, nothing written (`Test-Path` of the shown output folder is `False`) |
+| V73 | **Polygon across the border of two flights.** If the dataset has more than one flight folder (see V20d with `--per-folder 2`), draw one polygon that covers the border between two flights, save as `$Aoi\border.kml`, filter it, then `aoi copy $Data <its CSV> --dry-run` | captures from both flight folders in the subset (Excel: filter the `RelativeFolder` column; counts per flight noted); no "extra copies"; copy plans one flat folder with unique names. If blueberry is a single flight, mark n.a. and run it in Phase 4 (V86) |
+
+---
+
+## Phase 4: real campaign data
+
+> **Privacy first. Read this before you start.**
+> - Only **anonymous numbers** go into this file and into issues: counts, times, sizes,
+>   percentages, metres.
+> - **Never** commit or paste: coordinates, campaign / field / client names, folder paths of the
+>   campaign drive, KMLs of real fields, CSVs, reports, screenshots of maps or images.
+> - Every input and output of this phase stays in `C:\uav-demo\private` (outside the clone) or on
+>   the campaign drive; nothing from here goes to `examples/` or `docs/images/`.
+> - Before every commit: `git status` and `git diff` show changes to `docs/VALIDATION.md` only.
+
+```powershell
+$Priv = "C:\uav-demo\private"                 # all Phase 4/5 outputs
+$Camp = "<path to the campaign root>"         # e.g. D:\<campaign>; never written down here
+New-Item -ItemType Directory -Force $Priv | Out-Null
+```
+
+| ID | Check | Expected |
+|---|---|---|
+| V80 | **Scale and time.** `Measure-Command { aoi index $Camp --exclude "<calibration folder>" --out "$Priv\index.csv" \| Out-Default }`; watch Task Manager for the Python process | completes; progress bar works for the whole run; note captures, files, folders (`(Get-ChildItem $Camp -Recurse -Directory).Count`), total time, seconds per 1,000 captures and peak memory |
+| V81 | **Incomplete and GPS-less captures.** Read the summary of V80 | the counts are plausible for what you know of the campaign; for 2–3 examples of each list, check in Explorer why (missing band file, empty file, no GPS fix at take-off); describe the reasons in words, no names |
+| V82 | **Several days and flights.** `aoi footprint "$Priv\index.csv" --out "$Priv\fp_flights.kml" --per-folder 2` (or the depth of the flight folders); in Excel, the `CaptureTime` column | one polygon per flight, none spanning two days by mistake; the number of flights and days matches the field log; "extra copies" in V80 = 0 (IMG numbering restarts in every SET, which must **not** count as a copy) |
+| V83 | **Hard links at scale.** Draw a real AOI (kept in `$Priv`), filter it, then `Measure-Command { aoi copy $Camp <subset CSV> --mode hardlink --dest "<same drive>\<folder>" \| Out-Default }` | "Space needed: 0 bytes"; free space on the drive unchanged afterwards; files = captures × bands; note time |
+| V84 | **Old MATLAB results.** For a MATLAB index and subset CSV made earlier on this campaign: `uv run python scripts\compare_outputs.py csv "$Priv\index.csv" <old MATLAB index CSV>` and the same for a subset made with the same KML | `RESULT: SAME`, or every difference explained (e.g. folders added or renamed since the MATLAB run); note the largest position difference |
+| V85 | **Copy layout and report at scale.** `aoi copy $Camp <subset CSV> --dest "$Priv\copy_v85"`; open the report in Excel | report opens; statuses plausible; no long-path warning (or note the longest path) |
+| V86 | **AOI across two flights** (V73 on real data) | captures from both flights, counts per flight noted; no "extra copies" |
+| V87 | **Photogrammetry check.** Process one subset (V83 or V85) in Pix4Dmapper and compare with the earlier processing of the full campaign over the same area | note, numbers only: images used / calibrated (%), GSD, mosaic area, camera RMS, and the visible offset of the mosaic edge from the AOI in metres; the subset product covers the AOI except for a strip at the edges (see README, *Positional accuracy*) |
+
+---
+
+## Phase 5: real data, ROOT one level too high
+
+Users will often point ROOT at a folder above the campaign. Same privacy rules as Phase 4.
+
+| ID | Check | Expected |
+|---|---|---|
+| V90 | **Drive root.** On the campaign drive (not `C:`): `aoi index D:\ --out "$Priv\drive_index.csv"`, then `aoi copy D:\ "$Priv\drive_index.csv" --dry-run`, then `aoi index D:\ --out "$Priv\drive_index2.csv"` once more | no crash, no traceback; `System Volume Information` and `$RECYCLE.BIN` are skipped without a message; folders that cannot be read appear under *Folders not scanned*; captures = all campaigns on the drive. copy: `Output folder: D:\D_subset_01` and the warning that it is inside ROOT. Without `--out`, the index would be `D:\D_image_index_YYYYMMDD.csv` (or a clear "cannot write … permission denied" message with the `--out` hint). Delete the outputs afterwards. |
+| V91 | **Parent folder with old MATLAB subset folders.** ROOT = the folder that holds the campaign **and** old MATLAB copy outputs (folders of `IMG_####_#.tif` copies). `aoi index <parent> --out "$Priv\parent_index.csv"`; then filter it with the V83 AOI once without and once with `--skip-duplicates`; then `aoi copy <parent> <subset CSV> --skip-duplicates --dry-run` | index: "extra copies" = the number of captures in the old MATLAB folders (if they kept their GPS tags), listed with both folders; never stops. With `--skip-duplicates`, filter and copy give the same capture count as V83 on the clean campaign folder. `--exclude "<old subset folder>"` gives the same result as an alternative. |
+| V92 | **Folder with photogrammetry projects and other files.** ROOT = a folder with Pix4D project folders, reports, mosaics, spreadsheets next to the images. `Measure-Command { aoi index <folder> --out "$Priv\mixed_index.csv" \| Out-Default }` | unrelated files ignored; anything the photogrammetry software wrote that matches `IMG_####_#.tif` shows up as "extra copies" or under "without GPS" and can be removed with `--exclude "<project folder>"`; note the scan time compared with V80 |
+| V93 | **Scan benchmark.** `cd $Repo; uv run python scripts\bench_scan.py --dir $Priv` (synthetic, no real data), and once with `--dir` on the campaign drive | completes, "Captures: 3,000 (expected 3,000)"; note files/s for both drives |
+
+---
+
+## Finish and clean up (only when every check has passed)
 
 1. Prepare the README assets listed in [RELEASE.md](RELEASE.md), section A.
-2. Fill in the results table below. Use numbers only: no coordinates, no work paths, no user
-   names.
+2. Fill in the results tables below. Use numbers only: no coordinates, no work paths, no user
+   names, no campaign or field names (Phase 4 and 5 above all).
 3. Commit and push:
 
    ```powershell
    cd $Repo
-   git status                       # only docs/, examples/ and docs/images/ should change
+   git status                       # only docs/, examples/ and docs/images/ should change;
+                                    # nothing from Phase 4/5 except numbers in this file
    git add docs examples
    git commit -m "Record real-data validation results and README assets"
    git push
@@ -259,77 +373,136 @@ except in V69.
 
    ```powershell
    cd $Demo
-   Remove-Item -Recurse -Force $Repo, $Res, "$Demo\data\blueberry_subset_*", "$Demo\data\linked_north", "$Demo\data\move_src", "$Demo\data\move_dst", "$Demo\data\Saha Fotoğrafları – deneme" -ErrorAction SilentlyContinue
+   Remove-Item -Recurse -Force $Repo, $Res, $Priv, "$Demo\phase1", "$Demo\data\blueberry_subset_*", "$Demo\data\linked_north", "$Demo\data\move_src", "$Demo\data\move_dst", "$Demo\data\Saha Fotoğrafları – deneme" -ErrorAction SilentlyContinue
    cmdkey /list | Select-String github           # stored GitHub credentials
    cmdkey /delete:git:https://github.com         # remove them (repeat for each one listed)
    uv cache clean
    ```
 
+   Also delete the Phase 5 outputs on the campaign drive (`D:\D_subset_*`,
+   `D:\D_image_index_*.csv`, `<parent>_subset_*`, see the Phase 5 checks) and anything the
+   Phase 1 `uv tool install` added (`uv tool uninstall uav-aoi-subset`).
    Keep or delete the dataset (`$Data`), ExifTool, uv and Git as you prefer.
 6. On the Mac: `git pull`, then tell Claude that validation is done (see RELEASE.md, section B).
 
-## 10. Results
+## Results
 
 Commit tested: `_______`  Date: `__________`  Windows version: `______`  Python: `____`
 ExifTool: `_____`  LongPathsEnabled: `_`  Dataset ZIP size: `_____`
 Dataset folder layout: `________________________`
 
-| ID | Result (pass / fail / n.a.) | Numbers / notes |
-|---|---|---|
-| V1 | | |
-| V4 | | |
-| V10 | | captures / complete / with GPS / time |
-| V11 | | Excel column split? |
-| V12 | | |
-| V13 | | |
-| V14 | | |
-| V20 | | area (ha) |
-| V20a | | area (ha), ratio used |
-| V20b | | |
-| V20c | | buffer that matches Pix4D best |
-| V20d | | polygons (full folder / per flight) |
-| V20e | | captures inside |
-| V20f | | |
-| V20g | | |
-| V21 | | captures inside |
-| V22 | | |
-| V23 | | |
-| V24 | | |
-| V25 | | largest position difference |
-| V26 | | |
-| V27 | | ours: … MATLAB: … |
-| V30 | | |
-| V31 | | files / size / time |
-| V32 | | |
-| V33 | | time |
-| V33a | | |
-| V34 | | |
-| V35 | | |
-| V36 | | |
-| V37 | | |
-| V38 | | |
-| V39 | | |
-| V40 | | |
-| V41 | | Explorer / Pix4D can open? |
-| V42 | | |
-| V43 | | |
-| V44 | | |
-| V45 | | |
-| V46 | | |
-| V50 | | image count; flat layout OK in Pix4D? |
-| V51 | | |
-| V52 | | |
-| V60 | | sharp on high DPI? in front? |
-| V61 | | |
-| V62 | | |
-| V63 | | |
-| V64 | | |
-| V65 | | |
-| V66 | | |
-| V67 | | |
-| V68 | | |
-| V69 | | |
+Numbers only. Phase 4 and 5 rows never contain coordinates, campaign or field names, paths or
+screenshots.
 
-Findings to fix on the Mac:
+### Phase 1: install like an ordinary user
+
+| ID | Result (pass / fail / n.a.) | Numbers / notes | Issue # |
+|---|---|---|---|
+| P1 | | Windows version, admin?, winget?, execution policy, tools present | |
+| P2 | | uv route, minutes | |
+| P3 | | ExifTool route, minutes | |
+| P4 | | Git or ZIP, minutes | |
+| P5 | | minutes from start to --version | |
+| P6 | |  | |
+| P7 | |  | |
+
+Snag log (copy from your notes; one row per snag):
+
+| Step | What I expected | What happened | How I solved it | Time (min) | Issue # |
+|---|---|---|---|---|---|
+| | | | | | |
+
+### Phase 2: blueberry dataset
+
+| ID | Result (pass / fail / n.a.) | Numbers / notes | Issue # |
+|---|---|---|---|
+| V1 | | | |
+| V4 | | | |
+| V10 | | captures / complete / with GPS / time | |
+| V11 | | Excel column split? | |
+| V12 | | | |
+| V13 | | | |
+| V14 | | | |
+| V20 | | area (ha) | |
+| V20a | | area (ha), ratio used | |
+| V20b | | | |
+| V20c | | buffer that matches Pix4D best | |
+| V20d | | polygons (full folder / per flight) | |
+| V20e | | captures inside | |
+| V20f | | | |
+| V20g | | | |
+| V21 | | captures inside | |
+| V22 | | | |
+| V23 | | | |
+| V24 | | | |
+| V25 | | largest position difference | |
+| V26 | | | |
+| V27 | | ours: … MATLAB: … | |
+| V30 | | | |
+| V31 | | files / size / time | |
+| V32 | | | |
+| V33 | | time | |
+| V33a | | | |
+| V34 | | | |
+| V35 | | | |
+| V36 | | | |
+| V37 | | | |
+| V38 | | | |
+| V39 | | | |
+| V40 | | | |
+| V41 | | Explorer / Pix4D can open? | |
+| V42 | | | |
+| V43 | | | |
+| V44 | | | |
+| V45 | | | |
+| V46 | | | |
+| V50 | | image count; flat layout OK in Pix4D? | |
+| V51 | | | |
+| V52 | | | |
+| V60 | | sharp on high DPI? in front? | |
+| V61 | | | |
+| V62 | | | |
+| V63 | | | |
+| V64 | | | |
+| V65 | | | |
+| V66 | | | |
+| V67 | | | |
+| V68 | | | |
+| V69 | | | |
+
+### Phase 3: same data, different KMLs
+
+| ID | Result (pass / fail / n.a.) | Numbers / notes | Issue # |
+|---|---|---|---|
+| V70 | | captures inside (vs. V21) | |
+| V71 | |  | |
+| V72 | |  | |
+| V73 | | captures per flight folder | |
+
+### Phase 4: real campaign data (anonymous numbers only)
+
+| ID | Result (pass / fail / n.a.) | Numbers / notes | Issue # |
+|---|---|---|---|
+| V80 | | captures / files / folders / time / s per 1,000 captures / peak RAM | |
+| V81 | | complete / incomplete / without GPS / extra copies | |
+| V82 | | flights, days, polygons | |
+| V83 | | captures inside, files, time, space used | |
+| V84 | | largest position difference; differences explained? | |
+| V85 | |  | |
+| V86 | | captures per flight | |
+| V87 | | images calibrated %, GSD, area, RMS, edge offset (m) | |
+
+### Phase 5: real data, ROOT one level too high
+
+| ID | Result (pass / fail / n.a.) | Numbers / notes | Issue # |
+|---|---|---|---|
+| V90 | | time; folders not scanned; output names | |
+| V91 | | extra copies vs. old subset sizes; counts after --skip-duplicates | |
+| V92 | | files scanned, time vs. clean folder; anything matched? | |
+| V93 | | files/s (Mac: 0.7–1.1 million/s, warm cache) | |
+
+### Findings to fix on the Mac
+
+One line per finding, with its issue number:
 
 1. …
