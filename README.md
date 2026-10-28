@@ -9,8 +9,9 @@ separately in Pix4Dmapper.
 
 A free, open-source alternative to commercial GIS tools for this one job.
 
-> **Status:** work in progress. `index` and `filter` work; `copy` and `footprint` are not
-> implemented yet. The command-line interface below is the target shape.
+> **Status:** work in progress, not yet validated on real data. `index`, `filter` and `copy`
+> work; `footprint` is not implemented yet. The command-line interface below is the target
+> shape.
 
 ## Where it fits
 

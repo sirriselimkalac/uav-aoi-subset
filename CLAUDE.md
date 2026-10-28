@@ -129,10 +129,18 @@ to file/folder pickers (tkinter) — this mirrors the MATLAB `uigetdir`/`uigetfi
    calibration-panel shots) + tests.
 5. **footprint**.
 6. Picker fallback, progress bars, polished errors.
-7. `docs/VALIDATION.md` and a first real-data run on the work computer; fix findings.
-8. README with the public EagleNXT Altum-PT blueberry dataset as the worked example
-   (link only — never redistribute the data), sample KMLs in `examples/`, screenshots
-   from the validation run. Make the repo public and tag **v0.1.0**.
+7. **Real-data validation on the work computer** following `docs/VALIDATION.md`; record the
+   results there, fix findings on the Mac, re-validate. Best done once milestones 1–6 are all
+   finished, so a single visit covers every command.
+8. **README assets and README**: after all checks pass, prepare the example KMLs and the
+   screenshots on the work computer (list in `docs/RELEASE.md` section A) and push them from
+   there; then finish the README on the Mac (worked example with the public EagleNXT Altum-PT
+   blueberry dataset, link only, never redistribute the data).
+9. **Public gate** (`docs/RELEASE.md` section B): make the repo public and tag **v0.1.0** ONLY
+   when every check in `docs/VALIDATION.md` has passed on the commit to be tagged (or fixes
+   since were re-validated), the assets are committed and the README is complete. The user
+   does not want untested code to be public. Never make the repo public earlier, and never
+   suggest doing so.
 Later: Docker image (secondary distribution), tkinter GUI, QGIS plugin, benchmarks.
 
 ## Status (update at the end of each milestone)
@@ -190,6 +198,10 @@ Decisions made so far:
   Source, Destination, Status, Bytes, Message`, written next to the dest with a timestamp; dry
   runs write it only with `--report`.
 
+Validation prep is in place: `docs/VALIDATION.md` (work-computer checklist, covers milestones
+2–6), `docs/RELEASE.md` (README asset list + public gate), `scripts/compare_outputs.py`,
+`.gitattributes` (LF in the repo, also for commits from Windows). Not yet run on real data.
+
 Next: milestone 5 (`footprint`). Watch out for:
 - Read `../CSV_TO_MINAREA_POLYGON_KML.m` first. It takes the convex hull of all valid lat/lon
   (MATLAB projected to a local equirectangular plane first) and writes one KML polygon named
@@ -224,10 +236,19 @@ Next: milestone 5 (`footprint`). Watch out for:
 - Therefore the code MUST work on Windows: `pathlib` everywhere, no shell-specific
   commands, UTF-8 / Turkish characters in paths, `exiftool.exe` discovery on Windows,
   CI on `windows-latest`.
-- Maintain `docs/VALIDATION.md`: a copy-paste checklist for the work computer
-  (install uv + ExifTool on Windows, clone, `uv sync`, run index → filter → copy on the
-  blueberry data, compare against the MATLAB output CSV, record timings and results).
-  The user brings results back; fix issues on the Mac, push, re-validate.
+- `docs/VALIDATION.md` is the copy-paste checklist for the work computer (check IDs `V…`,
+  results table at the end). Running it is the FIRST thing to do whenever the repo is pulled
+  there. Keep it up to date: when a command or flag changes, update the affected checks in the
+  same commit. `scripts/compare_outputs.py` compares our CSVs and copy folders with the MATLAB
+  outputs.
+- **The work-computer clone is temporary.** It is deleted after validation and the README
+  assets are done (VALIDATION.md section 9), including the stored GitHub credentials. Only the
+  Mac copy remains. Therefore everything produced there (results, KMLs, screenshots) must be
+  committed and pushed from there, data and outputs stay outside the clone
+  (`C:\uav-demo\data`, `C:\uav-demo\results`), and the clone uses a repo-local git identity
+  with the noreply email. Results contain numbers only: no coordinates, no work paths or names.
+- If Claude Code runs on the work computer: start with `docs/VALIDATION.md`, never commit data
+  or outputs, and push results before anything is deleted.
 - Expected blueberry sanity numbers: 480 captures indexed, all complete with `--bands 7`.
 
 ## Working style
