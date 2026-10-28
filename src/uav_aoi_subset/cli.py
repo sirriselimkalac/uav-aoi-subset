@@ -55,8 +55,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="uav-aoi-subset",
         description=(
-            "Split large multispectral UAV image sets (MicaSense Altum-PT / RedEdge) into "
-            "subsets that fall inside an area of interest drawn in Google Earth (KML/KMZ)."
+            "Split large drone image sets (e.g. multispectral cameras that write one file per "
+            "band) into subsets that fall inside an area of interest drawn as a KML/KMZ "
+            "polygon."
         ),
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -68,7 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--bands",
         type=int,
         default=DEFAULT_BANDS,
-        help=f"Band files per capture (default {DEFAULT_BANDS} for Altum-PT; RedEdge = 5).",
+        help=f"Band files per capture (default {DEFAULT_BANDS}; use your camera's band count).",
     )
     p_index.add_argument(
         "--pattern",
@@ -82,7 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="DIR_GLOB",
         help="Skip folders whose name or ROOT-relative path (with '/') matches, "
-        "case-insensitive. Example: --exclude 'Kalibrasyon_*' 'Pix4d_*'",
+        "case-insensitive. Example: --exclude 'Calibration*' 'processing_*'",
     )
     p_index.add_argument(
         "--out",
@@ -181,7 +182,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--bands",
         type=int,
         default=DEFAULT_BANDS,
-        help=f"Band files per capture (default {DEFAULT_BANDS}; RedEdge = 5).",
+        help=f"Band files per capture (default {DEFAULT_BANDS}; as for 'index').",
     )
     p_copy.add_argument(
         "--pattern", default=DEFAULT_PATTERN, help="Band file name regex, as for 'index'."

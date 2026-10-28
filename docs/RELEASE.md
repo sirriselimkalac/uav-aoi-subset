@@ -87,12 +87,19 @@ assets.
    - safety notes (`--dry-run`, resume, `--confirm-move`, the marker file), limitations;
    - how to cite the dataset, licence.
    - Remove the "work in progress" status note.
+   - Keep the "Positional accuracy" section; add measured numbers only if the user gives them.
+   - Never fill in the `<!-- AUTHOR: ... -->` blocks: ask the user to write them (why the tool
+     exists, how it was built, author/contact, the optional field note).
 4. Public gate. Check each item:
    - [ ] `git log -p --all` contains no private paths, real campaign or project names, or
          coordinates other than the blueberry field. Search for terms such as `C:\Users`,
          `/Users/`, campaign names and `.tif`.
    - [ ] `git rev-list --objects --all` contains no imagery, archives or Pix4D files.
    - [ ] README links work, images render, the CI badge is green.
+   - [ ] No `<!-- AUTHOR:` placeholder is left in README.md (`grep -n "AUTHOR:" README.md`):
+         the user has written every block.
+   - [ ] README and CLI help (`uav-aoi-subset --help`, each command's `--help`) name no
+         camera, drone or photogrammetry software brands.
    - [ ] Version `0.1.0` in `pyproject.toml`; `uv lock`; the classifier is still
          "Pre-Alpha"/"Alpha" as appropriate.
    - [ ] The commit author email on all commits is the GitHub noreply address.

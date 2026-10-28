@@ -536,8 +536,9 @@ def plan_copy(
     longest = max((len(os.fspath(t.destination)) for t in tasks if t.destination), default=0)
     if longest > WINDOWS_MAX_PATH:
         warnings.append(
-            f"some output paths are {longest} characters long; Pix4Dmapper and other Windows "
-            f"programs may not open paths longer than {WINDOWS_MAX_PATH}; choose a shorter --dest"
+            f"some output paths are {longest} characters long; photogrammetry software and "
+            f"other Windows programs may not open paths longer than {WINDOWS_MAX_PATH}; choose a "
+            "shorter --dest"
         )
 
     needed = sum(t.size for t in tasks if t.writes_data)
