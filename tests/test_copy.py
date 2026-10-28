@@ -103,18 +103,37 @@ def test_long_path_windows_forms():
     assert long_path("/data/x.tif", windows=False) == "/data/x.tif"
 
 
-def test_default_dest_is_outside_root(tmp_path):
+def test_default_dest_is_numbered_next_to_root(tmp_path):
+    root = tmp_path / "Saha Kampanya"
+    root.mkdir()
+    dest = default_dest(root)
+    assert dest == (tmp_path / "Saha_Kampanya_subset_01").resolve()
+    assert not dest.is_relative_to(root.resolve())
+    assert not dest.exists()  # only chosen, not created
+
+
+def test_default_dest_takes_the_first_free_number(tmp_path):
     root = tmp_path / "Kampanya"
     root.mkdir()
-    dest = default_dest(root, tmp_path / "aoi" / "Kuzey Tarla_image_index_20261028.csv")
-    assert dest == (tmp_path / "Kampanya_subsets" / "Kuzey_Tarla_image_index_20261028").resolve()
-    assert not dest.is_relative_to(root.resolve())
+    (tmp_path / "Kampanya_subset_01").mkdir()
+    (tmp_path / "kampanya_SUBSET_02").write_text("x")  # a file, other case: still taken
+    (tmp_path / "Kampanya_subset_04").mkdir()
+    assert default_dest(root).name == "Kampanya_subset_03"
 
 
 def test_default_dest_needs_parent():
     top = Path(Path.cwd().anchor)
     with pytest.raises(CopyError, match="--dest"):
-        default_dest(top, Path("x.csv"))
+        default_dest(top)
+
+
+def test_marker_records_the_source(tree, tmp_path):
+    dest = tmp_path / "out"
+    plan = plan_copy(tree, records_for(tree), dest, subset_name="Kuzey_image_index.csv")
+    execute_copy(plan)
+    text = (dest / OUTPUT_MARKER).read_text(encoding="utf-8")
+    assert "Subset CSV: Kuzey_image_index.csv" in text
+    assert f"ROOT: {tree}" in text
 
 
 def test_default_report_path(tmp_path):

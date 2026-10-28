@@ -86,6 +86,15 @@ REPORT_COLUMNS = [
 MARKER_TEXT = "Created by uav-aoi-subset copy. Folders containing this file are never indexed.\n"
 
 
+def marker_text(root: Path, subset_name: str, now: dt.datetime | None = None) -> str:
+    """Contents of the output marker: says where the folder's files came from."""
+    now = now or dt.datetime.now()
+    lines = [MARKER_TEXT.rstrip("\n"), f"Created: {now:%Y-%m-%d %H:%M:%S}", f"ROOT: {root}"]
+    if subset_name:
+        lines.append(f"Subset CSV: {subset_name}")
+    return "\n".join(lines) + "\n"
+
+
 class CopyError(Exception):
     """A problem that stops the copy before (or while) files are written."""
 
@@ -141,6 +150,7 @@ class CopyPlan:
     bytes_needed: int
     bytes_free: int
     warnings: list[str] = field(default_factory=list)
+    subset_name: str = ""  # name of the subset CSV, recorded in the output marker
 
     @property
     def enough_space(self) -> bool:
@@ -178,8 +188,12 @@ def _fs(path: Path | str) -> Path:
     return Path(long_path(path))
 
 
-def default_dest(root: Path, subset_csv: Path) -> Path:
-    """``<ROOT parent>/<ROOT name>_subsets/<subset CSV name>``, always outside ROOT."""
+def default_dest(root: Path) -> Path:
+    """``<ROOT parent>/<ROOT name>_subset_NN`` with the first unused number, outside ROOT.
+
+    Every run gets a new folder, so runs with different AOIs never write into each other's
+    output. To resume an interrupted run, pass its folder as ``dest`` explicitly.
+    """
     root = Path(root).resolve()
     if root.parent == root:
         raise CopyError(
@@ -187,8 +201,12 @@ def default_dest(root: Path, subset_csv: Path) -> Path:
             "choose one with --dest"
         )
     project = sanitize_token(root.name) or "project"
-    subset = sanitize_token(Path(subset_csv).stem) or "subset"
-    return root.parent / f"{project}_subsets" / subset
+    # Compared case-insensitively: macOS and Windows file systems are.
+    taken = {p.name.casefold() for p in _fs(root.parent).iterdir()}
+    n = 1
+    while f"{project}_subset_{n:02d}".casefold() in taken:
+        n += 1
+    return root.parent / f"{project}_subset_{n:02d}"
 
 
 def default_report_path(dest: Path, now: dt.datetime | None = None) -> Path:
@@ -397,6 +415,7 @@ def plan_copy(
     extra_captures: Iterable[IndexRecord] = (),
     include: Iterable[str] = (),
     overwrite: bool = False,
+    subset_name: str = "",
     progress: ProgressCallback = no_progress,
 ) -> CopyPlan:
     """Work out every file operation without changing anything on disk.
@@ -508,6 +527,7 @@ def plan_copy(
         bytes_needed=needed,
         bytes_free=free,
         warnings=warnings,
+        subset_name=subset_name,
     )
 
 
@@ -596,7 +616,7 @@ def execute_copy(plan: CopyPlan, *, progress: ProgressCallback = no_progress) ->
     _fs(plan.dest).mkdir(parents=True, exist_ok=True)
     marker = _fs(plan.dest) / OUTPUT_MARKER
     if not marker.exists():
-        marker.write_text(MARKER_TEXT, encoding="utf-8")
+        marker.write_text(marker_text(plan.root, plan.subset_name), encoding="utf-8")
 
     made: set[Path] = set()
     for i, task in enumerate(pending):

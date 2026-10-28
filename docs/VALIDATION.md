@@ -167,16 +167,17 @@ uv run python scripts\compare_outputs.py csv $North.FullName "$Res\matlab_north.
 ## 8. copy
 
 ```powershell
-$Dest = "$Demo\data\blueberry_subsets\" + $North.BaseName    # the default destination
+$Dest = "$Demo\data\blueberry_subset_01"     # the default destination of the first run
 aoi copy $Data $North.FullName --dry-run
 ```
 
 | ID | Check | Expected |
 |---|---|---|
-| V30 | `--dry-run` | summary shown; `Test-Path $Dest` is `False`; no report written |
+| V30 | `--dry-run` | summary shows `Output folder: ...\blueberry_subset_01`; `Test-Path $Dest` is `False`; no report written |
 | V31 | `Measure-Command { aoi copy $Data $North.FullName --include '**/*.csv' \| Out-Default }` | files copied = V21 × 7 (+ the reflectance CSV); output in `$Dest`, folders flat; report CSV next to `$Dest`; write down the time |
 | V32 | `uv run python scripts\compare_outputs.py tree $Dest "$Res\matlab_copy_north"` | only differences are our extra report/include files, if any |
-| V33 | Run V31 again | everything skipped, exit code 0 (`$LASTEXITCODE`), takes seconds |
+| V33 | Resume: `aoi copy $Data $North.FullName --include '**/*.csv' --dest $Dest` | everything skipped, exit code 0 (`$LASTEXITCODE`), takes seconds |
+| V33a | New run without `--dest`: `aoi copy $Data $North.FullName --dry-run` | output folder is `blueberry_subset_02`; `$Dest` untouched. `Get-Content "$Dest\.uav-aoi-subset-output"` names the subset CSV |
 | V34 | Interrupt: `aoi copy $Data "$Res\ours_index.csv" --dest "$Res\full_copy"`, press Ctrl+C after a few seconds, then run it again | no `*.uas-partial` files left (`Get-ChildItem "$Res\full_copy" -Recurse -Filter *.uas-partial`); the second run completes; 3,360 files in total |
 | V35 | Conflict: `Set-Content "$Res\full_copy\<some folder>\IMG_0001_3.tif" "x"`, run again | exit code 1, the file is listed under *Conflicts* and left as it is; with `--overwrite` it is replaced |
 | V36 | Report: open the newest `*_copy_report_*.csv` in Excel | one row per file; statuses are plausible |
@@ -226,7 +227,7 @@ aoi copy $Data $North.FullName --dry-run
 
    ```powershell
    cd $Demo
-   Remove-Item -Recurse -Force $Repo, $Res, "$Demo\data\blueberry_subsets", "$Demo\data\linked_north", "$Demo\data\move_src", "$Demo\data\move_dst", "$Demo\data\Saha Fotoğrafları – deneme" -ErrorAction SilentlyContinue
+   Remove-Item -Recurse -Force $Repo, $Res, "$Demo\data\blueberry_subset_*", "$Demo\data\linked_north", "$Demo\data\move_src", "$Demo\data\move_dst", "$Demo\data\Saha Fotoğrafları – deneme" -ErrorAction SilentlyContinue
    cmdkey /list | Select-String github           # stored GitHub credentials
    cmdkey /delete:git:https://github.com         # remove them (repeat for each one listed)
    uv cache clean
@@ -260,6 +261,7 @@ ExifTool: `_____`  LongPathsEnabled: `_`  Dataset folder layout: `______________
 | V31 | | files / size / time |
 | V32 | | |
 | V33 | | time |
+| V33a | | |
 | V34 | | |
 | V35 | | |
 | V36 | | |

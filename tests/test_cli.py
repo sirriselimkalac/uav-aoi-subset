@@ -15,7 +15,7 @@ from synthetic import (
 
 from uav_aoi_subset import __version__
 from uav_aoi_subset.cli import main
-from uav_aoi_subset.core.discovery import discover_captures
+from uav_aoi_subset.core.discovery import OUTPUT_MARKER, discover_captures
 from uav_aoi_subset.core.filter import default_subset_path
 from uav_aoi_subset.core.index import IndexRecord, read_index_csv, write_index_csv
 
@@ -271,7 +271,7 @@ def test_copy_end_to_end(copy_inputs, tmp_path, capsys):
         "Kalibrasyon_IMG_0000",
     ]
     assert main(args) == 0
-    dest = tmp_path / "Kampanya_subsets" / "Kuzey_image_index_20261028"
+    dest = tmp_path / "Kampanya_subset_01"
     assert (dest / "Saha_Fotoğrafları_Part2_0000SET_000" / "IMG_0000_7.tif").is_file()
     assert (dest / "Kalibrasyon" / "IMG_0000_1.tif").is_file()
     assert (dest / "panel_reflectance.csv").is_file()
@@ -279,11 +279,17 @@ def test_copy_end_to_end(copy_inputs, tmp_path, capsys):
     assert "Subset records:     1 (+ 1 extra)" in out
     assert "Files copied:       15" in out  # 14 band files + 1 include
     assert "Include files:      1" in out
-    (report,) = dest.parent.glob("Kuzey_image_index_20261028_copy_report_*.csv")
+    (report,) = dest.parent.glob("Kampanya_subset_01_copy_report_*.csv")
     assert "copied" in report.read_text(encoding="utf-8-sig")
+    assert "Kuzey_image_index_20261028.csv" in (dest / OUTPUT_MARKER).read_text(encoding="utf-8")
 
-    # Second run: nothing left to do.
+    # A second run writes a new folder ...
     assert main(args) == 0
+    assert "Kampanya_subset_02" in capsys.readouterr().out
+    assert (tmp_path / "Kampanya_subset_02" / "panel_reflectance.csv").is_file()
+
+    # ... and resuming into the first one has nothing left to do.
+    assert main([*args, "--dest", str(dest)]) == 0
     out = capsys.readouterr().out
     assert "Files copied:       0" in out
     assert "skipped:          15" in out

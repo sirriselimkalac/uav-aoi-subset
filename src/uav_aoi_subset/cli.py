@@ -111,10 +111,11 @@ def build_parser() -> argparse.ArgumentParser:
         "copy",
         help="Copy the band files of a subset CSV into one flat output folder.",
         description="Copy (or hard-link, or move) the band files of the captures in "
-        "SUBSET_CSV. Folders are flattened (A/B/C -> A_B_C). Files already at the "
-        "destination with the same size are skipped, so an interrupted run can simply be "
-        "started again; files with a different size are never overwritten without "
-        "--overwrite.",
+        "SUBSET_CSV. Folders are flattened (A/B/C -> A_B_C). Every run writes to a new "
+        "<ROOT name>_subset_NN folder next to ROOT unless --dest is given. Files already at "
+        "the destination with the same size are skipped, so an interrupted run can be "
+        "resumed with --dest <its folder>; files with a different size are never overwritten "
+        "without --overwrite.",
     )
     p_copy.add_argument(
         "root", type=Path, metavar="ROOT", help="Project root folder (as given to 'index')."
@@ -126,7 +127,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--dest",
         type=Path,
         metavar="DIR",
-        help="Output folder (default: <ROOT parent>/<ROOT name>_subsets/<SUBSET_CSV name>).",
+        help="Output folder (default: a new <ROOT parent>/<ROOT name>_subset_NN with the next "
+        "free number). To resume an interrupted run, give its folder here.",
     )
     p_copy.add_argument(
         "--mode",
@@ -438,7 +440,7 @@ def _run_copy(args: argparse.Namespace) -> int:
     try:
         records = read_index_csv(args.subset_csv)
         extras = load_extra_captures(args.extra_captures)
-        dest = args.dest or default_dest(root, args.subset_csv)
+        dest = args.dest or default_dest(root)
         plan = plan_copy(
             root,
             records,
@@ -450,6 +452,7 @@ def _run_copy(args: argparse.Namespace) -> int:
             extra_captures=extras,
             include=args.include,
             overwrite=args.overwrite,
+            subset_name=args.subset_csv.name,
             progress=progress,
         )
     except (CopyError, ValueError, OSError) as exc:
@@ -459,6 +462,8 @@ def _run_copy(args: argparse.Namespace) -> int:
     progress.finish()
 
     print(f"Output folder:      {plan.dest}")
+    if args.dest is None and not args.dry_run:
+        print("  (new folder; if this run is interrupted, resume it with --dest and this path)")
     print(
         f"Mode:               {plan.mode}"
         + ("  (dry run, nothing is written)" if args.dry_run else "")
