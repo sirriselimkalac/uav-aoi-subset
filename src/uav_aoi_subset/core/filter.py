@@ -37,6 +37,12 @@ def utm_crs_for(geometry: BaseGeometry) -> CRS:
     return CRS.from_epsg((32600 if centre.y >= 0 else 32700) + zone)
 
 
+def to_crs(geometry: BaseGeometry, source: CRS, target: CRS) -> BaseGeometry:
+    """Reproject a geometry (x = longitude / easting, y = latitude / northing)."""
+    transformer = Transformer.from_crs(source, target, always_xy=True)
+    return shapely.transform(geometry, lambda xy: np.column_stack(transformer.transform(*xy.T)))
+
+
 def buffer_metres(geometry: BaseGeometry, metres: float) -> BaseGeometry:
     """Grow (positive) or shrink (negative) a WGS84 geometry by a distance in metres.
 
@@ -45,13 +51,15 @@ def buffer_metres(geometry: BaseGeometry, metres: float) -> BaseGeometry:
     if metres == 0:
         return geometry
     utm = utm_crs_for(geometry)
-    to_utm = Transformer.from_crs(WGS84, utm, always_xy=True)
-    to_wgs84 = Transformer.from_crs(utm, WGS84, always_xy=True)
-    projected = shapely.transform(geometry, lambda xy: np.column_stack(to_utm.transform(*xy.T)))
-    buffered = projected.buffer(metres)
+    buffered = to_crs(geometry, WGS84, utm).buffer(metres)
     if buffered.is_empty:
         raise ValueError(f"a buffer of {metres:g} m leaves nothing of the area")
-    return shapely.transform(buffered, lambda xy: np.column_stack(to_wgs84.transform(*xy.T)))
+    return to_crs(buffered, utm, WGS84)
+
+
+def area_hectares(geometry: BaseGeometry) -> float:
+    """Area of a WGS84 geometry in hectares, measured in its local UTM zone."""
+    return to_crs(geometry, WGS84, utm_crs_for(geometry)).area / 10_000
 
 
 def filter_records(
