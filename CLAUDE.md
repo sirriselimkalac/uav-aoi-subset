@@ -268,8 +268,8 @@ pushed from there before the clone is deleted. Take to that session:
   the noreply email (commands in section 1). Delete the stored credentials in section 9.
 - Dataset: download the EagleNXT blueberry ZIP (note its size: README says "about 19 GB"),
   extract to `C:\uav-demo\data\blueberry`; expect 3,360 TIFFs, 480 captures, all complete with
-  `--bands 7`. MATLAB must be available for section 7 (comparison with the `.m` scripts — copy
-  them from the Mac's parent folder by hand, never into the clone).
+  `--bands 7`. MATLAB and the `.m` scripts already on the work computer are used for section 7
+  (if missing, bring them over privately, never through the repository).
 - Draw the AOIs in Google Earth Pro (section 5); they become the `examples/` KMLs (RELEASE.md A).
 - Open questions to answer there: V50 — does Pix4Dmapper group the 7 bands of the renamed flat
   files? If not, switch the default to `--layout folders` (on the Mac). V41 — long paths in
