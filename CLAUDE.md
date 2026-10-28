@@ -135,9 +135,11 @@ to file/folder pickers (tkinter) — this mirrors the MATLAB `uigetdir`/`uigetfi
    calibration-panel shots) + tests.
 5. **footprint**.
 6. Picker fallback, progress bars, polished errors.
-7. **Real-data validation on the work computer** following `docs/VALIDATION.md`; record the
-   results there, fix findings on the Mac, re-validate. Best done once milestones 1–6 are all
-   finished, so a single visit covers every command.
+7. **Real-data validation on the work computer** following `docs/VALIDATION.md`, in five
+   phases: (1) install from the README only, (2) blueberry dataset, (3) same data with unusual
+   KMLs, (4) real campaign data (anonymous numbers only), (5) real data with ROOT one level too
+   high. Record the results there, file every finding as an issue with the bug report form, fix
+   on the Mac, re-validate.
 8. **README assets and README**: after all checks pass, prepare the example KMLs and the
    screenshots on the work computer (list in `docs/RELEASE.md` section A) and push them from
    there; then finish the README on the Mac (worked example with the public EagleNXT Altum-PT
@@ -154,7 +156,10 @@ Later: Docker image (secondary distribution), tkinter GUI, QGIS plugin, benchmar
 Done: **1 scaffold**, **2 index** (CI green on ubuntu/macOS/windows × Python 3.11/3.12),
 **3 filter** (CI green on all 6 jobs, 94 tests), **4 copy** (CI green on all 6 jobs, 136 tests),
 **5 footprint** + copy `_subset_NN` / `--layout` (CI green on all 6 jobs, 183 tests),
-**6 pickers, progress, polished errors** (CI green on all 6 jobs, 225 tests).
+**6 pickers, progress, polished errors** (CI green on all 6 jobs, 225 tests),
+**pre-validation hardening** (system/unreadable folders, links, drive roots, duplicate captures,
+scan benchmark; Windows README; bug report form; five-phase VALIDATION.md; CI green on all
+6 jobs, 249 tests).
 Package version is `0.0.1` until the v0.1.0 tag (milestone 8). Repo is private until then.
 
 Decisions made so far:
@@ -165,7 +170,26 @@ Decisions made so far:
   (incomplete, no position).
 - Skipped while indexing: hidden folders, `--exclude` globs (case-insensitive on every OS,
   matched against the folder name or the `/`-joined relative path), and any folder containing
-  the `OUTPUT_MARKER` file `.uav-aoi-subset-output`.
+  the `OUTPUT_MARKER` file `.uav-aoi-subset-output`. Also, silently: `SYSTEM_FOLDERS`
+  (`$RECYCLE.BIN`, `System Volume Information`) and folders with BOTH the Windows hidden and
+  system attributes (system alone is not enough: customised user folders can have it).
+  Linked folders are never followed: symlinks and Windows junctions (`st_reparse_tag` mount
+  point / symlink only, so cloud-sync placeholders are not mistaken for links), plus a visited
+  `(st_dev, st_ino)` set. Unreadable folders (`os.walk` `onerror`) and links not followed go into
+  the `warnings` list of `discover_captures` / `build_index` / `plan_copy`; `index` prints them
+  as *Folders not scanned*, copy as `warning:` lines. Never a crash.
+- Drive root as ROOT: `discovery.project_name(root)` = folder name, else drive letter (`D`),
+  UNC share (`server_share`) or `drive` for `/`. Index CSV `D:\D_image_index_YYYYMMDD.csv`;
+  copy default dest goes INSIDE the drive root (`D:\D_subset_NN`; marker + inside-ROOT warning),
+  because there is no folder next to it (the user chose this over requiring `--dest`).
+- Duplicates (`core/duplicates.py`): same `ImageBase.upper()`, `CaptureTime`, lat and lon
+  (exact; copies are byte-identical) in different folders. Records without time or position
+  (MATLAB CSVs) are never duplicates (`can_detect`). index/filter/copy always list the groups
+  and never stop; `--skip-duplicates` (filter, copy) keeps the first of each group in
+  case-insensitive RelativeFolder order; copy reports the others as `skipped-duplicate`.
+- `scripts/bench_scan.py`: synthetic tree (default 3,000 captures × 7 + 200,000 unrelated
+  files), times `discover_captures` only. Mac, warm cache: 0.7–1.1 million files/s. No
+  optimisation needed; re-run on the work computer as V93.
 - Index CSV: `RecordName, Complete (1/0), GPSLatitude, GPSLongitude` (same as MATLAB), then
   `GPSAltitude, CaptureTime, BandsFound, MissingBands` (`;`-separated), `RelativeFolder` (`/`),
   `ImageBase`. Written as `utf-8-sig` (Excel). `read_index_csv` also reads MATLAB CSVs.
@@ -254,29 +278,45 @@ Decisions made so far:
   in the main `--help` epilog and the README. `--version` (custom action, runs ExifTool only then)
   prints package, Python + platform, `ExifTool <ver> at <path>` or "not found on PATH".
 
-Validation prep is in place: `docs/VALIDATION.md` (work-computer checklist, covers milestones
-2–6; footprint = V20–V20g, Pix4D flat-layout check = V50, `--version` = V4, pickers / progress /
-Ctrl+C / permission = V60–V69), `docs/RELEASE.md` (README asset list + public gate),
-`scripts/compare_outputs.py`, `.gitattributes` (LF in the repo, also for commits from Windows).
-Not yet run on real data.
+Validation prep is in place: `docs/VALIDATION.md` (work-computer checklist in five phases:
+Phase 1 = P1–P7 + snag log, README only; Phase 2 = blueberry V1–V69 (footprint V20–V20g,
+Pix4D flat layout V50, `--version` V4, pickers / progress / Ctrl+C / permission V60–V69);
+Phase 3 = unusual KMLs V70–V73; Phase 4 = real campaign V80–V87, privacy rules first; Phase 5 =
+ROOT too high V90–V93; results tables per phase with an issue column), `docs/RELEASE.md`
+(README asset list + public gate), `.github/ISSUE_TEMPLATE/bug_report.yml` (issue form with
+privacy warning and checkbox; blank issues disabled), `scripts/compare_outputs.py`,
+`scripts/bench_scan.py`, `.gitattributes` (LF in the repo, also for commits from Windows).
+README *Installation* is written for an ordinary Windows user (uv/ExifTool without admin or
+scripts, `exiftool(-k).exe` rename, `--exiftool`, user PATH, new window, ZIP without Git,
+troubleshooting table). Not yet run on real data.
 
 Next: **milestone 7, real-data validation on the work computer** (Windows). Everything is run
-from `docs/VALIDATION.md` top to bottom; results (numbers only) go into its section 10 and are
-pushed from there before the clone is deleted. Take to that session:
-- Tools to install: Git, ExifTool (`winget install OliverBetz.ExifTool` or exiftool.org), uv.
-  GitHub sign-in through Git Credential Manager (repo is private); repo-local git identity with
-  the noreply email (commands in section 1). Delete the stored credentials in section 9.
+from `docs/VALIDATION.md` top to bottom, phase by phase; results (numbers only) go into its
+*Results* tables and are pushed from there before the clone is deleted. Every finding is opened
+as a GitHub issue with the bug report form (no coordinates, names, paths or screenshots of real
+data: issues become public with the repo). Take to that session:
+- **Phase 1 first, with the README only** (do not read VALIDATION.md beyond Phase 1 until it is
+  done); keep the snag log. This also installs the tools (uv, ExifTool; Git is needed from
+  Phase 2 on). GitHub sign-in through Git Credential Manager (repo is private); repo-local git
+  identity with the noreply email (commands in Phase 2, 2.1). Delete the stored credentials in
+  *Finish and clean up*.
+- Phases 4–5 use real campaign data: outputs only in `C:\uav-demo\private`, anonymous numbers
+  only in the repo. Delete the Phase 5 outputs on the campaign drive afterwards.
 - Dataset: download the EagleNXT blueberry ZIP (note its size: README says "about 19 GB"),
   extract to `C:\uav-demo\data\blueberry`; expect 3,360 TIFFs, 480 captures, all complete with
-  `--bands 7`. MATLAB and the `.m` scripts already on the work computer are used for section 7
-  (if missing, bring them over privately, never through the repository).
-- Draw the AOIs in Google Earth Pro (section 5); they become the `examples/` KMLs (RELEASE.md A).
+  `--bands 7`. MATLAB and the `.m` scripts already on the work computer are used for 2.7 and
+  V84 (if missing, bring them over privately, never through the repository).
+- Draw the AOIs in Google Earth Pro (2.5); they become the `examples/` KMLs (RELEASE.md A).
+  Phase 3 needs QGIS for V70.
 - Open questions to answer there: V50 — does Pix4Dmapper group the 7 bands of the renamed flat
   files? If not, switch the default to `--layout folders` (on the Mac). V41 — long paths in
   Explorer/Pix4D. V60/V66 — pickers sharp on high DPI and in front, bar not wrapping in the
-  Windows console. V20c — which footprint buffer matches the Pix4D mosaic.
+  Windows console. V20c — which footprint buffer matches the Pix4D mosaic. Phase 1 — which
+  install route works on a company computer. V91/V92 — are duplicates and project folders
+  handled well enough, or is a default `--exclude` list needed?
 - Also collect the RELEASE.md section A assets (screenshots, example KMLs, README facts) in the
-  same visit, then push everything from the work computer (section 9).
+  same visit (blueberry only), then push everything from the work computer (*Finish and clean
+  up*).
 - Back on the Mac: fix findings, re-validate on the work computer if code changed; then
   milestone 8 (README) and 9 (public gate).
 
