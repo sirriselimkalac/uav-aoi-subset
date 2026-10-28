@@ -98,7 +98,9 @@ precaution we could think of has been taken to keep it that way:
 - the band count and the file-name pattern are parameters (`--bands`, `--pattern`);
 - positions are read from the standard EXIF GPS tags with ExifTool;
 - areas of interest are standard KML/KMZ polygons;
-- the output is plain folders and CSV files that any photogrammetry or GIS software can read.
+- the output is plain folders and CSV files that any photogrammetry or GIS software can read;
+- the example-data helper (`examples/make_layered_dataset.py`) takes the same `--bands` and
+  `--pattern`, so it works with any one-folder dataset of per-band files.
 
 Other cameras, firmware versions or processing software may still behave in ways we could
 not foresee: different file naming or folder layouts, missing or unusual GPS tags, or
@@ -320,11 +322,91 @@ the AOI file as `<AOI name>_image_index_YYYYMMDD.csv`.
 
 To try the tool without your own data, you can use the public dataset
 [Altum-PT data of a blueberry field](https://eaglenxt.com/data-set/altum-pt-data-of-a-blueberry-field/)
-published by EagleNXT (480 captures × 7 bands, about 19 GB as a ZIP archive).
+published by EagleNXT: 480 captures × 7 bands, about 19 GB as a ZIP archive and 25 GB
+extracted.
 
 The data is not included in or redistributed by this repository. Download it from the
 provider's page; its terms of use are set by the provider. A step-by-step worked example
 with ready-made AOI files will be added to [`examples/`](examples/).
+
+As published, the dataset is **one folder**: all 3,360 band files and a calibration CSV side
+by side, with no sub-folders. The tool works with it as it is.
+
+### Why field data is harder
+
+Data straight from the field rarely looks like that:
+
+- Some multispectral cameras open a new numbered set folder (`0000SET`, `0001SET`, …) every
+  time they are switched on or start a flight, and **restart the image numbering** in each.
+  The same file name (`IMG_0000_1.tif`) then exists in several folders.
+- One flight is spread over several folders, and a campaign over many.
+- Older subset folders, copied out by hand or by other tools, are easily forgotten inside the
+  project tree, so the same capture can exist twice.
+
+The tool handles this: a capture is identified by its folder **and** image number, never by
+the file name alone; `copy` gives every file a unique name built from its folder chain; and
+captures found in more than one folder are listed as copies (`--skip-duplicates` keeps one).
+
+### Optional: a layered copy of the example data
+
+The one-folder example data cannot show these cases. If you want to see them on your own
+computer, `examples/make_layered_dataset.py` makes a copy of a one-folder dataset with a
+field-like folder tree. **This is optional**: the tool does not need it, and the example data
+works without it. The script is not part of the installed command; run it from the tool's
+folder (the Git clone or the extracted ZIP) with `uv run python …`.
+
+```bash
+uv run python examples/make_layered_dataset.py build C:\data\blueberry C:\data\blueberry_layered
+```
+
+It sorts the captures by image number, splits them into four consecutive groups (`--parts`)
+and writes each group into its own set folder, with the numbering restarting at `IMG_0000`
+in every group. Band suffixes are kept; other files, such as the calibration CSV, go into
+the first folder. Consecutive captures follow the flight lines, so each group covers a strip
+of the field.
+
+```
+blueberry_layered/
+├─ 0000SET/000/   IMG_0000_1.tif … IMG_0119_7.tif, calibration CSV
+├─ 0001SET/000/   IMG_0000_1.tif … IMG_0119_7.tif
+├─ 0002SET/000/   IMG_0000_1.tif … IMG_0119_7.tif
+├─ 0003SET/000/   IMG_0000_1.tif … IMG_0119_7.tif
+└─ old_subset/0001SET_000/   (only with --add-duplicate)
+blueberry_layered_mapping.csv   original file → new path and group
+```
+
+- **Disk space.** The default `--mode copy` needs as much free space as the data (about 25 GB
+  for the example; the script shows the amount and checks it before it starts).
+  `--mode hardlink` needs almost none, but only works on the same drive as the data, and the
+  new files *share their contents* with the originals: changing one changes the other.
+- `--add-duplicate [GROUP]` writes one group (default: 2) a second time into `old_subset/`,
+  like a forgotten earlier subset folder.
+- The input folder is never changed. The output folder must be new or empty and outside
+  the input.
+- `--bands` and `--pattern` work as in the tool, so other one-folder datasets work too.
+- `uv run python examples/make_layered_dataset.py build --help` lists all options.
+
+A suggested walk-through (replace `YYYYMMDD` with the date in the file names). Draw the AOI
+`cross.kml` **across** the flight lines, so that it crosses all four strips:
+
+```bash
+uav-aoi-subset index C:\data\blueberry
+uv run python examples/make_layered_dataset.py build C:\data\blueberry C:\data\blueberry_layered
+uav-aoi-subset index C:\data\blueberry_layered
+uav-aoi-subset footprint C:\data\blueberry_layered\blueberry_layered_image_index_YYYYMMDD.csv --per-folder 1
+uav-aoi-subset filter C:\data\blueberry\blueberry_image_index_YYYYMMDD.csv --aoi C:\aoi\cross.kml --out C:\aoi\cross_flat.csv
+uav-aoi-subset filter C:\data\blueberry_layered\blueberry_layered_image_index_YYYYMMDD.csv --aoi C:\aoi\cross.kml --out C:\aoi\cross_layered.csv
+uav-aoi-subset copy C:\data\blueberry_layered C:\aoi\cross_layered.csv
+uv run python examples/make_layered_dataset.py verify C:\data\blueberry_layered_mapping.csv C:\aoi\cross_flat.csv C:\aoi\cross_layered.csv
+```
+
+- The layered index finds the same 480 captures, although `IMG_0000` now exists four times.
+- `footprint --per-folder 1` draws one outline per set folder: four strips.
+- `copy` writes one folder in which no two files clash (`0000SET_000_IMG_0000_1.tif`,
+  `0001SET_000_IMG_0000_1.tif`, …).
+- `verify` translates both subsets back to the original files and prints `RESULT: SAME` when
+  they hold the same captures (exit code 0). It also lists captures found more than once, for
+  example from `old_subset/` when the layered copy was made with `--add-duplicate`.
 
 ## Development
 
