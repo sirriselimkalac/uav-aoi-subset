@@ -9,7 +9,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from uav_aoi_subset.core.discovery import DEFAULT_PATTERN, discover_captures, sanitize_token
+from uav_aoi_subset.core.discovery import (
+    DEFAULT_PATTERN,
+    discover_captures,
+    project_name,
+)
 from uav_aoi_subset.core.exif import ExifReader
 from uav_aoi_subset.core.progress import ProgressCallback, no_progress
 
@@ -110,10 +114,10 @@ def build_index(
 
 
 def default_index_path(root: Path, today: dt.date | None = None) -> Path:
-    """``<root>/<project>_image_index_YYYYMMDD.csv``, project = root folder name."""
+    """``<root>/<project>_image_index_YYYYMMDD.csv``, project = root folder name (or drive)."""
     root = Path(root)
     today = today or dt.date.today()
-    project = sanitize_token(root.resolve().name) or "project"
+    project = project_name(root.resolve())
     return root / f"{project}_image_index_{today:%Y%m%d}.csv"
 
 

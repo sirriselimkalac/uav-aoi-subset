@@ -36,7 +36,7 @@ from uav_aoi_subset.core.discovery import (
     Capture,
     discover_captures,
     flat_folder_name,
-    sanitize_token,
+    project_name,
 )
 from uav_aoi_subset.core.index import (
     CSV_ENCODING,
@@ -201,20 +201,19 @@ def default_dest(root: Path) -> Path:
 
     Every run gets a new folder, so runs with different AOIs never write into each other's
     output. To resume an interrupted run, pass its folder as ``dest`` explicitly.
+
+    At the top of a drive there is no folder next to ROOT, so the output goes inside it
+    (``D:\\D_subset_01``); its marker file keeps later ``index`` runs out of it.
     """
     root = Path(root).resolve()
-    if root.parent == root:
-        raise CopyError(
-            f"{root} is the top of a drive, so there is no folder next to it for the output; "
-            "choose one with --dest"
-        )
-    project = sanitize_token(root.name) or "project"
+    folder = root if root.parent == root else root.parent
+    project = project_name(root)
     # Compared case-insensitively: macOS and Windows file systems are.
-    taken = {p.name.casefold() for p in _fs(root.parent).iterdir()}
+    taken = {p.name.casefold() for p in _fs(folder).iterdir()}
     n = 1
     while f"{project}_subset_{n:02d}".casefold() in taken:
         n += 1
-    return root.parent / f"{project}_subset_{n:02d}"
+    return folder / f"{project}_subset_{n:02d}"
 
 
 def default_report_path(dest: Path, now: dt.datetime | None = None) -> Path:

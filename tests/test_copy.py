@@ -1,5 +1,6 @@
 import csv
 import errno
+import re
 from collections import namedtuple
 from pathlib import Path
 
@@ -121,10 +122,13 @@ def test_default_dest_takes_the_first_free_number(tmp_path):
     assert default_dest(root).name == "Kampanya_subset_03"
 
 
-def test_default_dest_needs_parent():
-    top = Path(Path.cwd().anchor)
-    with pytest.raises(CopyError, match="--dest"):
-        default_dest(top)
+def test_default_dest_at_the_top_of_a_drive_goes_inside_it():
+    top = Path(Path.cwd().anchor).resolve()
+    dest = default_dest(top)
+    assert dest.parent == top
+    expected = top.drive.rstrip(":") if top.drive else "drive"
+    assert re.fullmatch(rf"{re.escape(expected)}_subset_\d\d", dest.name)
+    assert not dest.exists()  # only chosen, not created
 
 
 def test_marker_records_the_source(tree, tmp_path):

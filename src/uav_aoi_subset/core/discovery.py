@@ -14,7 +14,7 @@ import re
 import stat
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePath, PurePosixPath
 
 from uav_aoi_subset.core.progress import ProgressCallback, no_progress
 
@@ -56,6 +56,15 @@ def record_name(rel_parts: Iterable[str], base: str) -> str:
     folder = flat_folder_name(rel_parts)
     image = sanitize_token(base)
     return f"{folder}_{image}" if folder else image
+
+
+def project_name(root: PurePath) -> str:
+    """Name used in default output names: the ROOT folder name, or the drive for a drive root.
+
+    ``D:\\`` gives ``D``, ``\\\\server\\share`` gives ``server_share`` and ``/`` gives ``drive``.
+    """
+    name = root.name or root.drive.rstrip(":") or "drive"
+    return sanitize_token(name) or "project"
 
 
 @dataclass

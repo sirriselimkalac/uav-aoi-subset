@@ -1,6 +1,6 @@
 import os
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
 from synthetic import ALTUM_LAYOUT, make_altum_tree, write_capture
@@ -9,6 +9,7 @@ from uav_aoi_subset.core.discovery import (
     OUTPUT_MARKER,
     discover_captures,
     flat_folder_name,
+    project_name,
     record_name,
     sanitize_token,
 )
@@ -200,3 +201,17 @@ def test_junction_loop_is_not_followed(tmp_path):
     captures = discover_captures(tmp_path, warnings=warnings)
     assert [c.relative_folder for c in captures] == ["a/000"]
     assert warnings == ["linked folder not followed: a/000/loop"]
+
+
+@pytest.mark.parametrize(
+    ("root", "expected"),
+    [
+        (PureWindowsPath("D:\\survey\\Saha 2026"), "Saha_2026"),
+        (PureWindowsPath("D:\\"), "D"),
+        (PureWindowsPath("\\\\server\\share\\"), "server_share"),
+        (PurePosixPath("/"), "drive"),
+        (PurePosixPath("/data/x"), "x"),
+    ],
+)
+def test_project_name(root, expected):
+    assert project_name(root) == expected
