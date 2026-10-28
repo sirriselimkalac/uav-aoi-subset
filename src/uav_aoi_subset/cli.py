@@ -8,7 +8,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from uav_aoi_subset import __version__
+from uav_aoi_subset import __version__, pickers
 from uav_aoi_subset.core.aoi import AOIError, load_aoi
 from uav_aoi_subset.core.copy import (
     FLAT,
@@ -62,9 +62,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
+    parser.subcommands = sub.choices  # for errors that need the subcommand's usage line
 
-    p_index = sub.add_parser("index", help="Build a capture index CSV for a flight folder tree.")
-    p_index.add_argument("root", type=Path, metavar="ROOT", help="Project root folder.")
+    # Options every command accepts.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
+        "--no-picker",
+        action="store_true",
+        help="Never open a file/folder picker for a missing path; fail with a usage error "
+        f"instead (same as setting {pickers.ENV_NO_PICKER}=1).",
+    )
+
+    p_index = sub.add_parser(
+        "index", parents=[common], help="Build a capture index CSV for a flight folder tree."
+    )
+    p_index.add_argument(
+        "root",
+        type=Path,
+        nargs="?",
+        metavar="ROOT",
+        help="Project root folder (if left out, a folder picker opens).",
+    )
     p_index.add_argument(
         "--bands",
         type=int,
@@ -95,16 +113,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--exiftool", type=Path, metavar="PATH", help="ExifTool executable (default: from PATH)."
     )
 
-    p_filter = sub.add_parser("filter", help="Keep index rows that fall inside an AOI.")
+    p_filter = sub.add_parser(
+        "filter", parents=[common], help="Keep index rows that fall inside an AOI."
+    )
     p_filter.add_argument(
-        "index_csv", type=Path, metavar="INDEX_CSV", help="Index CSV written by 'index'."
+        "index_csv",
+        type=Path,
+        nargs="?",
+        metavar="INDEX_CSV",
+        help="Index CSV written by 'index' (if left out, a file picker opens).",
     )
     p_filter.add_argument(
         "--aoi",
         type=Path,
-        required=True,
         metavar="AREA",
-        help="AOI polygon file (.kml/.kmz). Several polygons are combined; holes are honoured.",
+        help="AOI polygon file (.kml/.kmz), required. Several polygons are combined; holes "
+        "are honoured. If left out, a file picker opens in the folder of INDEX_CSV.",
     )
     p_filter.add_argument(
         "--buffer",
@@ -122,6 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_copy = sub.add_parser(
         "copy",
+        parents=[common],
         help="Copy the band files of a subset CSV into one flat output folder.",
         description="Copy (or hard-link, or move) the band files of the captures in "
         "SUBSET_CSV into one folder; each file is named after its folder chain "
@@ -132,10 +157,18 @@ def build_parser() -> argparse.ArgumentParser:
         "without --overwrite.",
     )
     p_copy.add_argument(
-        "root", type=Path, metavar="ROOT", help="Project root folder (as given to 'index')."
+        "root",
+        type=Path,
+        nargs="?",
+        metavar="ROOT",
+        help="Project root folder, as given to 'index' (if left out, a folder picker opens).",
     )
     p_copy.add_argument(
-        "subset_csv", type=Path, metavar="SUBSET_CSV", help="CSV written by 'filter'."
+        "subset_csv",
+        type=Path,
+        nargs="?",
+        metavar="SUBSET_CSV",
+        help="CSV written by 'filter' (if left out, a file picker opens in ROOT).",
     )
     p_copy.add_argument(
         "--dest",
@@ -214,6 +247,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_footprint = sub.add_parser(
         "footprint",
+        parents=[common],
         help="Write the outline of all capture positions as a KML polygon.",
         description="Write the hull of the capture positions in INDEX_CSV as a KML polygon for "
         "Google Earth. The positions are capture centres: the imaged ground reaches further, "
@@ -222,8 +256,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_footprint.add_argument(
         "index_csv",
         type=Path,
+        nargs="?",
         metavar="INDEX_CSV",
-        help="Index or subset CSV (MATLAB index CSVs work too, except with --per-folder).",
+        help="Index or subset CSV (MATLAB index CSVs work too, except with --per-folder). "
+        "If left out, a file picker opens.",
     )
     p_footprint.add_argument(
         "--out",
@@ -661,16 +697,113 @@ def _run_footprint(args: argparse.Namespace) -> int:
     return 0
 
 
+# Paths each command needs, in the order the pickers ask for them:
+# (attribute, metavar or option, "folder"/"file", picker title, file types).
+REQUIRED_PATHS = {
+    "index": [("root", "ROOT", "folder", "Select the project root folder", None)],
+    "filter": [
+        ("index_csv", "INDEX_CSV", "file", "Select the index CSV", pickers.CSV_FILES),
+        ("aoi", "--aoi", "file", "Select the AOI polygon (KML/KMZ)", pickers.AOI_FILES),
+    ],
+    "copy": [
+        ("root", "ROOT", "folder", "Select the project root folder", None),
+        ("subset_csv", "SUBSET_CSV", "file", "Select the subset CSV", pickers.CSV_FILES),
+    ],
+    "footprint": [
+        ("index_csv", "INDEX_CSV", "file", "Select the index or subset CSV", pickers.CSV_FILES)
+    ],
+}
+
+# Command-line tokens that need no quoting in any common shell.
+_SAFE_TOKEN = re.compile(r"[A-Za-z0-9_.,:/=+@%-]+")
+
+
+def _quote(token: str, always: bool = False) -> str:
+    if not always and _SAFE_TOKEN.fullmatch(token):
+        return token
+    return '"' + token + '"'
+
+
+def equivalent_command(
+    tokens: Sequence[str],
+    picked: Sequence[tuple[str, Path]],
+    typed: Sequence[Path] = (),
+) -> str:
+    """The command line that repeats this run without pickers.
+
+    ``tokens`` is what the user typed (starting with the command), ``typed`` the positional
+    paths among them and ``picked`` the (metavar or option, path) pairs chosen in pickers.
+    Picked positionals go right after the last typed one: argparse would not assign a second
+    positional that is separated from the first by options.
+    """
+    out = [_quote(t) for t in tokens]
+    positionals = [(name, path) for name, path in picked if not name.startswith("-")]
+    options = [(name, path) for name, path in picked if name.startswith("-")]
+    if positionals:
+        at = 1  # right after the command
+        for i, token in enumerate(tokens[1:], start=1):
+            if not token.startswith("-") and Path(token) in typed:
+                at = i + 1
+        out[at:at] = [_quote(str(path), always=True) for _, path in positionals]
+    for name, path in options:
+        out += [name, _quote(str(path), always=True)]
+    return " ".join(["uav-aoi-subset", *out])
+
+
+def _fill_missing_paths(
+    parser: argparse.ArgumentParser, args: argparse.Namespace, tokens: Sequence[str]
+) -> int | None:
+    """Ask for missing required paths in pickers. Returns an exit code to stop with."""
+    needed = REQUIRED_PATHS.get(args.command, [])
+    missing = [item for item in needed if getattr(args, item[0]) is None]
+    if not missing:
+        return None
+    subparser = parser.subcommands[args.command]
+    names = ", ".join(item[1] for item in missing)
+    if not pickers.pickers_available(args.no_picker):
+        subparser.error(f"the following arguments are required: {names}")
+
+    picked: list[tuple[str, Path]] = []
+    # The next picker opens where the previous path is (MATLAB did the same).
+    given = [getattr(args, item[0]) for item in needed if getattr(args, item[0]) is not None]
+    start = given[-1] if given else None
+    for attr, name, kind, title, filetypes in missing:
+        initialdir = None if start is None else (start if start.is_dir() else start.parent)
+        try:
+            if kind == "folder":
+                path = pickers.ask_folder(title, initialdir)
+            else:
+                path = pickers.ask_open_file(title, filetypes, initialdir)
+        except pickers.PickerCancelled:
+            print(f"Cancelled: no {kind} selected; nothing was done.", file=sys.stderr)
+            return 1
+        except pickers.PickerUnavailable as exc:
+            subparser.error(
+                f"the following arguments are required: {names} (no file picker could be "
+                f"opened: {exc}; give the paths on the command line)"
+            )
+        setattr(args, attr, path)
+        picked.append((name, path))
+        start = path
+    typed = [p for p in given if p is not getattr(args, "aoi", None)]
+    print(f"Equivalent command: {equivalent_command(tokens, picked, typed)}\n")
+    return None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     # Folder names may contain characters the console code page cannot show (Windows).
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(errors="replace")
     parser = build_parser()
-    args = parser.parse_args(argv)
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    args = parser.parse_args(tokens)
     if args.command is None:
         parser.print_help()
         return 2
+    stop = _fill_missing_paths(parser, args, tokens)
+    if stop is not None:
+        return stop
     if args.command == "index":
         return _run_index(args)
     if args.command == "filter":
