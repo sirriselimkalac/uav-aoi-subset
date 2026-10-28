@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from uav_aoi_subset import __version__, pickers
+from uav_aoi_subset.console import ConsoleProgress
 from uav_aoi_subset.core.aoi import AOIError, load_aoi
 from uav_aoi_subset.core.copy import (
     FLAT,
@@ -304,34 +305,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-class _ConsoleProgress:
-    """One self-overwriting status line on stderr; silent when stderr is not a terminal."""
-
-    LABELS = {
-        "scan": "Scanning folders: {done} files",
-        "exif": "Reading GPS: {done}/{total}",
-        "plan": "Checking files: {done}/{total} captures",
-        "copy": "Writing files: {done}/{total}",
-    }
-
-    def __init__(self) -> None:
-        self.enabled = sys.stderr.isatty()
-        self.active = False
-
-    def __call__(self, stage: str, done: int, total: int | None) -> None:
-        if not self.enabled:
-            return
-        text = self.LABELS.get(stage, stage + ": {done}").format(done=done, total=total)
-        sys.stderr.write("\r" + text.ljust(60))
-        sys.stderr.flush()
-        self.active = True
-
-    def finish(self) -> None:
-        if self.active:
-            sys.stderr.write("\n")
-            self.active = False
-
-
 def _list_some(title: str, lines: list[str]) -> None:
     if not lines:
         return
@@ -372,7 +345,7 @@ def _run_index(args: argparse.Namespace) -> int:
     if not _pattern_ok(args.pattern):
         return 1
 
-    progress = _ConsoleProgress()
+    progress = ConsoleProgress()
     try:
         reader = ExifToolReader(args.exiftool)
         records = build_index(
@@ -542,7 +515,7 @@ def _run_copy(args: argparse.Namespace) -> int:
         )
         return 1
 
-    progress = _ConsoleProgress()
+    progress = ConsoleProgress()
     try:
         records = read_index_csv(args.subset_csv)
         extras = load_extra_captures(args.extra_captures)
