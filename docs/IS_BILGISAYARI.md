@@ -13,57 +13,59 @@ yazılmaz. Depo bir gün açık olacak; geçmişteki her satır da açılır.
 - Güncelleme: 2026-11-03
 - Veri seti açık: `D:\altum-pt-blueberries-60m-sample-data\altum-pt-blueberries-60m-sample-data`
   (tek klasör; 3.361 dosya bekleniyor, 2.1'deki sayımlarla doğrulanacak).
-- Pix4D: tüm veriyle bir proje açıldı ve 1. adımı bitti, ama **3D Maps** şablonuyla
-  (`D:\altum-pt-blueberries-60m-sample-data\altum-pt-blueberries`). Karar aşağıda: Ag
-  Multispectral ile yeni proje.
 - Uçuş düzeni (Pix4D harita görünümünden): hatlar kuzey-güney, gidiş-dönüş; başlangıç batı
   kenarının ortası (ilk hat yarım), her hattan sonra doğuya kayıyor, bitiş kuzeydoğu köşesi.
   Bu, V75'in beklenen cevabıdır.
-- Pix4D Ag Multispectral projesi: 1. adım 44 dk sonra `e0046 No calibrated cameras` ile bitti
-  (2026-11-03 11:02). Anahtar nokta ve eşleşme sayıları iyi (görüntü başına medyan 14.669 /
-  10.431); başlangıç kareleri reddedilmiş ("All initial frames rejected", "No initial frame").
-  Aynı veri 3D Maps ile kalibre oldu. Kalibrasyon yöntemi iki şablonda da Standard, neden o
-  değil. Neden için iş bilgisayarındaki Claude iki `.p4d` ve iki logu karşılaştırıyor.
-  Doğrulama bunu beklemez: 3D Maps projesi (kalite raporunda kalibre oranı ~%95 üstüyse) 2.
-  adım, sonra 3. adım için ortomozaik + Google Maps Tiles and KML, Index Calculator beş bant
-  Camera and Sun Irradiance, **LWIR No Correction** (Camera Only termali sabit kazançla
-  ölçekliyor). Adımlar her zaman tek tek başlatılır.
+- Veri setinde iki panel çekimi var (önceki varsayımın tersine): `IMG_0000` kalkış öncesi,
+  `IMG_0479` iniş sonrası, yerde, elle tetiklenmiş. VALIDATION.md V14, V20, V42 buna göre
+  düzeltildi.
+- Pix4D, iki proje (Pix4Dmapper 4.10.1; adımlar her zaman tek tek başlatılır):
+  - `altum-pt-blueberries` (3D Maps): 1. adım "bitti" ama kullanılamaz. Kalite raporunda
+    yalnız yeşil bantta 3D iz var; rig göreli dönüşleri fabrika değerlerinden (< 1°) 95°'ye
+    kadar kaymış, NIR ve mavide iç parametreler anlamsız. Dokunma, karşılaştırma için kalsın.
+  - `altum-pt-blueberries-ag` (Ag Multispectral): 1. adım `e0046 No calibrated cameras`.
+  - Teşhis (iki `.p4d` ve iki logun karşılaştırması, 2026-11-03): iki projenin 1. adım ayarları
+    aynı (Standard, iç parametreler All, rig modu "optimize relative rotation using a subset of
+    secondary cameras", ±5°). Rig dönüşleri kalibrasyonun başında, yalnız 9 yeşil çekim varken
+    serbest kalıyor ve bundle patlıyor; birinci projenin bitmesi şans. Ham eşleşmeler bütün
+    bantlarda var.
+  - Projeye 3.346 görüntü girmiş: `IMG_0000_1-7` ve `IMG_0479_1-5,7` (panel) alınmamış,
+    `IMG_0479_6` radyometri görüntüsü olarak tutulmuş; `IMG_0478_7` nedeni bilinmeden eksik, bu
+    yüzden `IMG_0478` tutarsız çekim sayılıp devre dışı. Doğrulamayı etkilemez.
+  - **Sıradaki:** 1. bölüm: rig dönüşlerini sabitleyip `-ag` projesinde 1. adımı yeniden çalıştır.
 - Faz 1: sürüyor. Takılma kaydının ilk dört satırı VALIDATION.md'ye yazıldı ve README düzeltildi
   (winget/git kontrolü, Git kurulumu, yeni pencere). Sıradaki: README'yi `git pull` ile tazele,
   `uv sync`, P5-P7. Faz 2-5: başlamadı.
 
-## 1. Pix4D şablonu: Ag Multispectral ile yeniden
+## 1. Pix4D: rig dönüşleri sabit, `-ag` projesinde 1. adım
 
-Doğrulama açısından şablon hiçbir kontrolün sonucunu değiştirmez: bantların aynı çekime
-gruplanması (V50, V77e) görüntü içe aktarılırken olur, şablondan önce; V20c ise kaba bir görsel
-karşılaştırmadır. Yine de yeniden yapıyoruz, çünkü:
+Doğrulama için Pix4D'den gerekenler: bantların aynı çekime gruplanması (V50, V77e; içe
+aktarmada olur), görüntülenen alanın KML'i (V20c) ve ekran görüntüleri. Bantları hizalı doğru
+bir sonuç, README'nin "Pix4Dmapper ile denendi" cümlesinin dürüst olması için gerekli.
 
-- Ag Multispectral bu kamera için doğru şablon (reflektans ve indeks haritaları, radyometrik
-  düzeltme); 3D Maps RGB ortomozaik ve 3B model içindir;
-- README'nin *Tested setup* bölümü "Pix4Dmapper ile denendi" diyor; bu, kameranın doğru
-  akışıyla denenmiş olmalı, ekran görüntüleri (RELEASE.md A2) de oradan alınacak;
-- 1. adım bu veri boyutunda kısa sürer ve üzerine henüz hiçbir şey kurulmadı.
-
-Yapılacak:
-
-1. Mevcut 3D Maps projesine dokunma (Pix4D bir adımı yeniden başlatınca o adımın eski
-   çıktılarını siler). Bitince silinebilir.
-2. *Yeni Proje* → ad `altum-pt-blueberries-ag`, konum `D:\altum-pt-blueberries-60m-sample-data\`
-   → *Add Images*: veri klasöründeki 3.360 TIFF → kamera Altum-PT olarak tanınmalı, 7 bant
-   gruplanmış olmalı (480 çekim) → şablon **Ag Multispectral** → *İşlemeye Başla* işaretsiz.
-3. *İşleme Seçenekleri*:
-   - 3. adım → Index Calculator → radyometrik düzeltme: beş reflektans bandı
-     **Camera and Sun Irradiance**. Veri setinde panel çekimi yok (yalnız panel CSV'si), bu
-     yüzden *Kalibre Et* kullanılamaz; LWIR **Camera Only**.
-   - 3. adım → ortomozaik açık, çıktı olarak **Google Maps Tiles and KML** işaretli
-     (V20c'deki "Pix4D alan KML'i" bu olacak). Bu seçenek yoksa: QGIS'te bir reflektans
-     haritasının geçerli piksellerinden poligon çıkar (Raster → Dönüştürme → Poligonlaştır) ve
-     KML olarak kaydet. KML her durumda **klonun dışında** (`$Res`) kalır, commit edilmez.
-4. 1, 2 ve 3. adımları çalıştır.
-5. Log penceresinin başındaki `Active GPU` satırına bak. "Microsoft Remote Display Adapter"
-   yazıyorsa Pix4D uzak masaüstü bağdaştırıcısını seçmiş, A4000'i kullanmıyor: Pix4D
-   ayarlarında (Yardım → Ayarlar, işleme/donanım sekmesi) A4000'i seç, olmuyorsa not et. Doğrulamayı
-   etkilemez, yalnız süreyi.
+1. `altum-pt-blueberries` projesine dokunma. Deneme `altum-pt-blueberries-ag` projesinde
+   (zaten başarısız, kaybedilecek bir şey yok).
+2. Rig göreli dönüşlerini **optimize ettirmeyen** seçeneği bul ve seç. Bakılacak yerler:
+   *İşleme Seçenekleri → 1. Initial Processing → Calibration* (rig işleme seçeneği,
+   şu anki değer "optimize relative rotation using a subset of secondary cameras"); orada
+   yoksa *Image Properties Editor → Camera Model / Rig → Edit*. Tam adı doğrulanmadı;
+   bulamazsan iki pencerenin ekran görüntüsünü Mac'teki oturuma gönder.
+3. 1. adımın diğer ayarlarına dokunma (Standard, iç parametreler All). Tek değişken rig.
+4. Yalnız 1. adımı çalıştır.
+5. Başarı ölçütleri (kalite raporu): bütün bantlarda rig dönüşleri < 1°; *2D Keypoints
+   Table* içinde her bandın eşleşen nokta medyanı > 0; *Camera Optimization* göreli farkı
+   birkaç yüzdenin altında (şu an %61); tek blok. Raporu Mac'teki oturuma gönder.
+6. İç parametreler yine kayarsa, ikinci deneme: rig sabit + *Internal Parameters
+   Optimization* **All Prior**.
+7. 1. adım temizse 2. adım. 3. adımdan önce: ortomozaik açık ve **Google Maps Tiles and KML**
+   işaretli (bu projede şablon kapattı; V20c'deki "Pix4D alan KML'i" bu olacak); Index
+   Calculator beş reflektans bandı **Camera and Sun Irradiance**, LWIR **No Correction**
+   (Camera Only termali sabit kazançla ölçekliyor). Panel kalibrasyonu doğrulama için gerekmez.
+   KML yoksa QGIS'te bir reflektans haritasının geçerli piksellerinden poligon çıkar
+   (Raster → Dönüştürme → Poligonlaştır). KML her durumda **klonun dışında** (`$Res`) kalır.
+8. Log penceresinin başındaki `Active GPU` satırı "Microsoft Remote Display Adapter" diyorsa
+   Pix4D A4000'i kullanmıyor: Pix4D ayarlarında (Yardım → Ayarlar) A4000'i seç, olmuyorsa not
+   et. Doğrulamayı etkilemez, yalnız süreyi.
 
 ## 2. Klasörler (VALIDATION.md 2.1'in yerine)
 
@@ -101,7 +103,7 @@ okuma.
 |---|---|
 | 2.1 sayımlar | `$Data` yukarıdaki yol; `Move-Item` adımı atlanır, sayım komutları aynen çalıştırılır |
 | V12 | kopya D:'ye gider (25,4 GB); kontrolden sonra sil |
-| V20c | Pix4D KML'i 1. bölümdeki Ag Multispectral projesinin 3. adımından |
+| V20c | Pix4D KML'i 1. bölümdeki `-ag` projesinin 3. adımından |
 | V37, V40 | `$Data` ile aynı sürücü (D:) olmalı; yukarıdaki değerlerle öyle |
 | V43, V44 | "diğer sürücü" bu kurulumda **C:** (`--dest C:\uav-demo-other\...`); sonra sil |
 | V50-V52 | tüm veriyle açılan proje değil, V31'in alt küme klasörüyle **ayrı yeni** proje (şablon Ag Multispectral) |

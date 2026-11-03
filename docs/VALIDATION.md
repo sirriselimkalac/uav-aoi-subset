@@ -40,7 +40,10 @@ results: **no coordinates, no imagery, no campaign or field names, no work paths
 screenshots of real data.** Replace paths with placeholders (`D:\<campaign>\...`).
 
 Dataset for Phases 2–3: EagleNXT *"Altum-PT data of a blueberry field"*. It has 480 captures ×
-7 bands = 3,360 TIFFs plus one calibration-panel reflectance CSV. It is public, but it is
+7 bands = 3,360 TIFFs plus one calibration-panel reflectance CSV. Two of the 480 captures are
+calibration-panel shots on the ground, in the same folder as the others: `IMG_0000` (before
+take-off) and `IMG_0479` (after landing); their GPS altitude is about −13 m against about 43 m
+in flight, and their EXIF `TriggerMethod` is 0 (manual) instead of 6. It is public, but it is
 **never** committed or redistributed; the README only links to it. The dataset page states no
 licence.
 
@@ -171,7 +174,7 @@ Measure-Command { aoi index $Data --out "$Res\ours_index.csv" | Out-Default }
 | V11 | Open `ours_index.csv` in Excel (double-click) | Note whether the columns split correctly. With a Turkish locale Excel may expect `;`. Turkish characters must display correctly. |
 | V12 | Turkish path: `Copy-Item -Recurse $Data "$Demo\data\Saha Fotoğrafları – deneme"`, then `aoi index "$Demo\data\Saha Fotoğrafları – deneme" --out "$Res\tr_index.csv"` | same numbers as V10 |
 | V13 | ExifTool not on PATH: `aoi index $Data --out "$Res\x.csv" --exiftool "<full path to exiftool.exe>"` with a PATH without ExifTool (`$env:Path = ($env:Path -split ';' \| ? { $_ -notmatch 'exiftool' }) -join ';'`) | works with `--exiftool`; without it, a clear "ExifTool was not found on PATH" error that lists only the **Windows** install steps (installer, or rename `exiftool(-k).exe`), exit code 1, no traceback. Open a new window afterwards. |
-| V14 | If the dataset contains calibration-panel captures in their own folder: `aoi index $Data --exclude "<panel folder>" --out "$Res\nopanel.csv"` | panel captures left out. **Blueberry: n.a.** (no panel captures, only the reflectance CSV) |
+| V14 | If the dataset contains calibration-panel captures in their own folder: `aoi index $Data --exclude "<panel folder>" --out "$Res\nopanel.csv"` | panel captures left out. **Blueberry: n.a.** (its two panel captures lie in the same folder as the flight captures, so `--exclude` of a folder does not apply) |
 
 ### 2.4 footprint
 
@@ -187,7 +190,7 @@ Keep the merged-area KML you made earlier with Pix4D **outside the clone** (for 
 
 | ID | Check | Expected |
 |---|---|---|
-| V20 | Default (convex) footprint, open in Google Earth Pro | one yellow, semi-transparent polygon around all capture positions; 480 captures used, 0 without GPS; click it: the balloon shows captures, area (ha) and the CSV name. Note the area. |
+| V20 | Default (convex) footprint, open in Google Earth Pro | one yellow, semi-transparent polygon around all capture positions; 480 captures used, 0 without GPS; click it: the balloon shows captures, area (ha) and the CSV name. Note the area, and whether the two ground panel captures (`IMG_0000`, `IMG_0479`) pull the outline away from the field. |
 | V20a | `--hull concave` | area smaller than or equal to V20; the outline follows the flight lines (no large empty corners). If it cuts into the field, try `--ratio 0.5` and note which ratio fits best. |
 | V20b | `--buffer 20` | outline about 20 m outside V20 everywhere (Google Earth ruler) |
 | V20c | Open V20, V20b and the Pix4D merged-area KML together | visual comparison: the Pix4D area (the imaged ground) should lie around the V20 outline; note roughly which buffer (V20b or another value) matches the Pix4D area best |
@@ -276,7 +279,7 @@ aoi copy $Data $North.FullName --dry-run
 | V39 | Move on a **disposable copy** (never the original): copy `$Res\full_copy` to `$Demo\data\move_src`, delete `.uav-aoi-subset-output` in it, `aoi index $Demo\data\move_src --out "$Res\move_index.csv"`, then `aoi copy $Demo\data\move_src "$Res\move_index.csv" --dest "$Demo\data\move_dst" --mode move --confirm-move`; run it a second time | first run: all moved, no TIFFs left in `move_src`; second run: all "already at the destination", nothing reported missing |
 | V40 | Destination inside the root: `aoi copy $Data $North.FullName --dest "$Data\_subset_test"`, then `aoi index $Data --out "$Res\after.csv"` | warning on copy; the index still shows 480 captures. Then delete `$Data\_subset_test`. |
 | V41 | Long path: `aoi copy $Data $North.FullName --dest "$Res\$('a'*120)\$('b'*120)"` | warning about long paths; files exist. Note whether Explorer and Pix4Dmapper can open them. |
-| V42 | Extra captures (if the dataset has panel captures): `--extra-captures <panel record names>` or a text file with one name per line | panel files copied next to the others, named `<panel folder chain>_IMG_####_<band>.tif`. **Blueberry: n.a.** (no panel captures) |
+| V42 | Extra captures (panel captures): `aoi copy $Data $North.FullName --extra-captures <RecordName of IMG_0000> <RecordName of IMG_0479> --dest "$Res\north_with_panels"` (record names from `ours_index.csv`), or a text file with one name per line | the 14 panel files copied next to the subset files (in ROOT itself, so names stay `IMG_0000_<band>.tif`); files = V21 × 7 + 14 |
 | V43 | Other drive (USB stick or D:, optional): `--dest` on that drive with `--mode copy` | works |
 | V44 | Same, with `--mode hardlink` | refused **before** anything is written ("hard links only work on one drive") |
 | V45 | exFAT/FAT32 stick (optional): put a small subset folder on the stick as ROOT, index it, then `--mode hardlink` with a `--dest` on the stick | stops with the "may not support hard links … use --mode copy" message; no fallback to copying |
@@ -516,7 +519,7 @@ Snag log (copy from your notes; one row per snag):
 | V11 | | Excel column split? | |
 | V12 | | | |
 | V13 | | | |
-| V14 | n.a. | no panel captures in the dataset | |
+| V14 | n.a. | panel captures share the folder of the flight captures | |
 | V20 | | area (ha) | |
 | V20a | | area (ha), ratio used | |
 | V20b | | | |
@@ -545,7 +548,7 @@ Snag log (copy from your notes; one row per snag):
 | V39 | | | |
 | V40 | | | |
 | V41 | | Explorer / Pix4D can open? | |
-| V42 | n.a. | no panel captures in the dataset | |
+| V42 | | files copied (V21 × 7 + 14?) | |
 | V43 | | | |
 | V44 | | | |
 | V45 | | | |
