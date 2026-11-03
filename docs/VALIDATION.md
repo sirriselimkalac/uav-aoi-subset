@@ -1,7 +1,9 @@
 # Real-data validation on the work computer (Windows)
 
 **Do this first, every time the repository is pulled on the work computer.** This is the only
-machine that has real imagery. The Mac (development machine) only ever sees synthetic test data.
+machine that has real imagery. Setup-specific notes (folders, order, status) for the current work
+computer are in [IS_BILGISAYARI.md](IS_BILGISAYARI.md); read its *Status* section first, but not
+before Phase 1 is done. The Mac (development machine) only ever sees synthetic test data.
 
 The repository stays **private until every check below has passed** on the commit that will
 become v0.1.0, and the README assets in [RELEASE.md](RELEASE.md) are committed.
