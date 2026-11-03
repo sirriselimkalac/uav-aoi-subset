@@ -103,6 +103,7 @@ assets.
    - Never fill in the `<!-- AUTHOR: ... -->` blocks: ask the user to write them (why the tool
      exists, how it was built, author/contact, the optional field note).
 4. Public gate. Check each item:
+   - [ ] `docs/IS_BILGISAYARI.md` (internal notes for the work-computer sessions) is deleted.
    - [ ] `git log -p --all` contains no private paths, real campaign or project names, or
          coordinates other than the blueberry field. Search for terms such as `C:\Users`,
          `/Users/`, campaign names and `.tif`.
