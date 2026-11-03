@@ -501,7 +501,7 @@ Snag log (copy from your notes; one row per snag):
 
 | Step | What I expected | What happened | How I solved it | Time (min) | Issue # |
 |---|---|---|---|---|---|
-| uv: `uv --version` | version | not recognized in the window used for the install | closed and opened a new window | 1 | README step 1 wording (commit after 82b0c10) |
+| uv: `uv --version` | version | not recognized in the window used for the install | closed and opened a new window | 1 | README step 1 wording (commit 3d9b474) |
 | ExifTool: `winget install --id OliverBetz.ExifTool -e` | installed into a folder of its own | installed for the user under `AppData\Local\Programs` | left as it is; on `PATH` (checked in the environment variables, 2 min) | 2 | README step 2 note |
 | Git: `git clone …` | clone | Git not installed, so the command failed | `winget install --id Git.Git -e --source winget` | 10 | README steps 0 and 3 |
 | Git: `git clone …` | clone | sign-in requested (repository still private) | signed in through the browser | 10 | none (public repo needs no sign-in) |
