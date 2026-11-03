@@ -22,11 +22,12 @@ yazılmaz. Depo bir gün açık olacak; geçmişteki her satır da açılır.
 - Pix4D Ag Multispectral projesi: 1. adım 44 dk sonra `e0046 No calibrated cameras` ile bitti
   (2026-11-03 11:02). Anahtar nokta ve eşleşme sayıları iyi (görüntü başına medyan 14.669 /
   10.431); başlangıç kareleri reddedilmiş ("All initial frames rejected", "No initial frame").
-  Aynı veri 3D Maps ile kalibre oldu; fark büyük olasılıkla 1. adımın kalibrasyon yöntemi.
-  Yapılacak: İşleme Seçenekleri → 1. Initial Processing → Calibration → *Calibration Method*
-  alanına bak; **Alternative** ise **Standard** yap, diğer Ag Multispectral ayarlarına dokunma,
-  1. adımı yeniden çalıştır. Yine düşerse: 3D Maps projesinin 1. adımını koru, yalnız 2. ve 3.
-  adım seçeneklerini 1. bölümdeki gibi ayarlayıp onları çalıştır.
+  Aynı veri 3D Maps ile kalibre oldu. Kalibrasyon yöntemi iki şablonda da Standard, neden o
+  değil. Neden için iş bilgisayarındaki Claude iki `.p4d` ve iki logu karşılaştırıyor.
+  Doğrulama bunu beklemez: 3D Maps projesi (kalite raporunda kalibre oranı ~%95 üstüyse) 2.
+  adım, sonra 3. adım için ortomozaik + Google Maps Tiles and KML, Index Calculator beş bant
+  Camera and Sun Irradiance, **LWIR No Correction** (Camera Only termali sabit kazançla
+  ölçekliyor). Adımlar her zaman tek tek başlatılır.
 - Faz 1: sürüyor. Takılma kaydının ilk dört satırı VALIDATION.md'ye yazıldı ve README düzeltildi
   (winget/git kontrolü, Git kurulumu, yeni pencere). Sıradaki: README'yi `git pull` ile tazele,
   `uv sync`, P5-P7. Faz 2-5: başlamadı.
