@@ -122,6 +122,22 @@ Windows if you follow the "without admin" routes below.
 > PowerShell and open it again). Programs that were just installed or added to `PATH` are
 > only found in windows opened afterwards.
 
+### 0. Check what you already have
+
+On Windows, in PowerShell:
+
+```powershell
+winget --version
+git --version
+uv --version
+exiftool -ver
+```
+
+Each line either prints a version or says the name `is not recognized`. Skip the steps for the
+tools you already have. If `winget` is not recognized (it is missing on some Windows Server
+versions and on locked-down company computers), use the routes below that do not need it.
+Git is optional: step 3 also works with a ZIP download.
+
 ### 1. uv
 
 - **Windows** (PowerShell):
@@ -132,7 +148,7 @@ Windows if you follow the "without admin" routes below.
 
   If scripts or downloads from PowerShell are blocked (common on company computers), use one
   of these instead:
-  - `winget install --id astral-sh.uv -e`
+  - `winget install --id astral-sh.uv -e --source winget`
   - or, if Python is already installed: `py -m pip install --user uv`
   - or, without any installer: download `uv-x86_64-pc-windows-msvc.zip` from the
     [uv releases page](https://github.com/astral-sh/uv/releases), extract `uv.exe` into a folder
@@ -140,12 +156,14 @@ Windows if you follow the "without admin" routes below.
     [Adding a folder to PATH on Windows](#adding-a-folder-to-path-on-windows)).
 - **macOS / Linux**: `curl -LsSf https://astral.sh/uv/install.sh | sh` (or `brew install uv`).
 
-Check in a new window: `uv --version`
+Close the window, open a new one and check: `uv --version`. In the window you installed from,
+`uv` is usually not found yet.
 
 ### 2. ExifTool
 
 - **Windows**, one of:
-  - `winget install --id OliverBetz.ExifTool -e` (installer, puts ExifTool on `PATH`);
+  - `winget install --id OliverBetz.ExifTool -e --source winget` (installs for your user,
+    under `AppData\Local\Programs`, and puts ExifTool on `PATH`);
   - the Windows installer linked from [exiftool.org](https://exiftool.org/);
   - **without an installer:** download the Windows executable ZIP from
     [exiftool.org](https://exiftool.org/) and extract it to a folder of your own, for example
@@ -163,7 +181,9 @@ Check in a new window: `exiftool -ver`
 
 ### 3. This tool
 
-With Git:
+With Git. If `git --version` was not recognized in step 0, install it first or use the ZIP route
+below. On Windows: `winget install --id Git.Git -e --source winget`, or the installer from
+[git-scm.com](https://git-scm.com/download/win); then open a new window.
 
 ```bash
 git clone https://github.com/sirriselimkalac/uav-aoi-subset.git
@@ -205,6 +225,8 @@ example `C:\Tools\exiftool` → *OK*. Open a new PowerShell window.
 
 | Message | What to do |
 |---|---|
+| `git : The term 'git' is not recognized` | Git is not installed: install it (step 3) and open a new window, or use the ZIP route. |
+| `winget : The term 'winget' is not recognized` | winget is not available on this computer: use the installer, `pip` or ZIP routes. |
 | `uv : The term 'uv' is not recognized` | Open a new PowerShell window. If it persists, uv's folder is not on `PATH`: use another route from step 1. |
 | `running scripts is disabled on this system` | Use `winget`, `pip` or the ZIP route of step 1; the tool itself needs no script permission. |
 | `ExifTool was not found on PATH` | Install it (step 2) and open a new window, or pass `--exiftool C:\path\to\exiftool.exe`. |

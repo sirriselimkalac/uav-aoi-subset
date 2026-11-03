@@ -102,8 +102,8 @@ PowerShell (not admin). Skip the tools Phase 1 already installed; Git is needed 
 
 ```powershell
 # Tools. If winget is blocked, use the installers from the websites instead.
-winget install --id Git.Git -e
-winget install --id OliverBetz.ExifTool -e      # or the Windows build from https://exiftool.org
+winget install --id Git.Git -e --source winget
+winget install --id OliverBetz.ExifTool -e --source winget   # or the Windows build from https://exiftool.org
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 # Open a NEW PowerShell window afterwards so PATH is updated.
 git --version; exiftool -ver; uv --version
@@ -501,7 +501,10 @@ Snag log (copy from your notes; one row per snag):
 
 | Step | What I expected | What happened | How I solved it | Time (min) | Issue # |
 |---|---|---|---|---|---|
-| | | | | | |
+| uv: `uv --version` | version | not recognized in the window used for the install | closed and opened a new window | 1 | README step 1 wording (commit after 82b0c10) |
+| ExifTool: `winget install --id OliverBetz.ExifTool -e` | installed into a folder of its own | installed for the user under `AppData\Local\Programs` | left as it is; on `PATH` (checked in the environment variables, 2 min) | 2 | README step 2 note |
+| Git: `git clone …` | clone | Git not installed, so the command failed | `winget install --id Git.Git -e --source winget` | 10 | README steps 0 and 3 |
+| Git: `git clone …` | clone | sign-in requested (repository still private) | signed in through the browser | 10 | none (public repo needs no sign-in) |
 
 ### Phase 2: blueberry dataset
 

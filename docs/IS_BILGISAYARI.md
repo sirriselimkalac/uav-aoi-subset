@@ -19,7 +19,10 @@ yazılmaz. Depo bir gün açık olacak; geçmişteki her satır da açılır.
 - Uçuş düzeni (Pix4D harita görünümünden): hatlar kuzey-güney, gidiş-dönüş; başlangıç batı
   kenarının ortası (ilk hat yarım), her hattan sonra doğuya kayıyor, bitiş kuzeydoğu köşesi.
   Bu, V75'in beklenen cevabıdır.
-- Faz 1: yapılmadı ya da sonucu yazılmadı. Faz 2-5: başlamadı.
+- Pix4D Ag Multispectral projesi: 1. adım hata ile bitti (2026-11-03); neden log ile aranıyor.
+- Faz 1: sürüyor. Takılma kaydının ilk dört satırı VALIDATION.md'ye yazıldı ve README düzeltildi
+  (winget/git kontrolü, Git kurulumu, yeni pencere). Sıradaki: README'yi `git pull` ile tazele,
+  `uv sync`, P5-P7. Faz 2-5: başlamadı.
 
 ## 1. Pix4D şablonu: Ag Multispectral ile yeniden
 
