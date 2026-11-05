@@ -10,7 +10,7 @@ yazılmaz. Depo bir gün açık olacak; geçmişteki her satır da açılır.
 
 ## Durum
 
-- Güncelleme: 2026-11-03
+- Güncelleme: 2026-11-05
 - Veri seti açık: `D:\altum-pt-blueberries-60m-sample-data\altum-pt-blueberries-60m-sample-data`
   (tek klasör; 3.361 dosya bekleniyor, 2.1'deki sayımlarla doğrulanacak).
 - Uçuş düzeni (Pix4D harita görünümünden): hatlar kuzey-güney, gidiş-dönüş; başlangıç batı
@@ -27,10 +27,26 @@ yazılmaz. Depo bir gün açık olacak; geçmişteki her satır da açılır.
   kalıp kayıyordu (fabrika < 1°, sonuç 95°'ye kadar); bundle patladı, ilk projenin bitmesi
   şanstı. Ayrıca `IMG_0478_7` içe aktarılmamış (`IMG_0478` devre dışı kaldı) ve panel
   görüntüsü `IMG_0479_6` projede kalmıştı. Sonradan görüntü eklenemediği için yeni proje.
-  **Sıradaki:** 1. bölümle `altum-pt-blueberries-v2` kurulumu ve yalnız 1. adım.
+- `altum-pt-blueberries-v2` (2026-11-04/05) üç adımı da bitti:
+  - 1. adım: rig modu **Rely on Relatives** (raporda "rely on relatives and match only reference
+    camera"; yalnız referans kamera, yeşil, eşleşir ve iç parametreleri optimize edilir, diğer
+    bantlar fabrika rig değerleriyle bağlı). 3.346/3.346 kalibre (14 panel görüntüsü devre
+    dışı), rig dönüşleri başlangıç değerinde (en büyüğü LWIR 0,915°), yeşil R1 −0,135, yeniden
+    izdüşüm 0,122 px, tek blok, GSD 2,72 cm, alan 9,55 ha, 9 dk 49 sn.
+  - 2. adım: şablon değerleri (yarım ölçek, düşük yoğunluk), 2,61 milyon nokta, 1 dk 44 sn.
+    GPU ayarı *Processing Options → Resources and Notifications* altında (A4000 seçili); raporun
+    "unknown graphics card" satırı yalnız raporlama.
+  - 3. adım: altı optik bant **Camera and Sun Irradiance** ve panel hedefiyle (Pix4D panel
+    görüntüsünü, `IMG_0479`, ve poligonu kendisi buldu), LWIR **No Correction**; reflektans
+    haritaları 1 × GSD, 52 dk.
+  - **Açık 1:** raporda DSM ve ortomozaik süreleri 0 sn; ortomozaik ve Google Maps Tiles/KML
+    büyük olasılıkla üretilmedi (şablonda kapalı). V20c'ye gelince bakılacak; 3. adım bunun için
+    yeniden başlatılmaz (yeniden başlatma reflektans haritalarını siler).
+  - **Açık 2:** panel albedo değerleri (CSV'deki bant merkezleriyle) doğrulanmadı; raporda
+    yazmıyor. `.p4d` dosyası Mac'teki oturuma gönderilince kontrol edilecek.
 - Faz 1: sürüyor. Takılma kaydının ilk dört satırı VALIDATION.md'ye yazıldı ve README düzeltildi
-  (winget/git kontrolü, Git kurulumu, yeni pencere). Sıradaki: README'yi `git pull` ile tazele,
-  `uv sync`, P5-P7. Faz 2-5: başlamadı.
+  (winget/git kontrolü, Git kurulumu, yeni pencere). **Sıradaki:** Faz 1 klasöründe `git pull`,
+  `uv sync`, P5-P7 (yalnız README'ye bakarak). Faz 2-5: başlamadı.
 
 ## 1. Pix4D: yeni proje `altum-pt-blueberries-v2`
 
