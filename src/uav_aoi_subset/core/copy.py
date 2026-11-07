@@ -5,10 +5,11 @@ and what to do with it without writing anything (this is also the ``--dry-run`` 
 :func:`execute_copy` then carries the plan out. Both leave their outcome in the task list, so
 a dry run and a real run produce the same report.
 
-Relative folders are flattened. With the default ``flat`` layout every file lands directly in
-the output folder, named after its folder chain (``A/B/C/IMG_0000_1.tif`` ->
-``A_B_C_IMG_0000_1.tif``); the ``folders`` layout keeps one folder per source folder instead
-(``A_B_C/IMG_0000_1.tif``).
+Relative folders are flattened. The default ``folders`` layout keeps one output folder per
+source folder, named after its folder chain, and does not change file names
+(``A/B/C/IMG_0000_1.tif`` -> ``A_B_C/IMG_0000_1.tif``). The optional ``flat`` layout puts every
+file directly in the output folder and renames it after its folder chain
+(``A_B_C_IMG_0000_1.tif``).
 
 Files are written under a temporary name and renamed when complete, so an interrupted run
 never leaves a truncated file under the final name; a later run skips the files that are
@@ -49,7 +50,7 @@ from uav_aoi_subset.core.progress import ProgressCallback, no_progress
 
 MODES = ("copy", "hardlink", "move")
 
-# Output layouts: one folder with folder-chain file names, or one flat folder per source folder.
+# Output layouts: one flat folder per source folder (default), or one folder with renamed files.
 FLAT, FOLDERS = "flat", "folders"
 LAYOUTS = (FLAT, FOLDERS)
 
@@ -431,7 +432,7 @@ def plan_copy(
     dest: Path,
     *,
     mode: str = "copy",
-    layout: str = FLAT,
+    layout: str = FOLDERS,
     bands: int = DEFAULT_BANDS,
     pattern: str = DEFAULT_PATTERN,
     exclude: Iterable[str] = (),

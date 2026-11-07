@@ -37,3 +37,6 @@ desktop.ini
 .idea/
 .vscode/
 *.swp
+
+# Local test AOI (not an example file)
+docs/area-of-interest.kml

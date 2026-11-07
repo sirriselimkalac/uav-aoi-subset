@@ -14,7 +14,7 @@ from uav_aoi_subset import __version__, pickers
 from uav_aoi_subset.console import ConsoleProgress
 from uav_aoi_subset.core.aoi import AOIError, load_aoi
 from uav_aoi_subset.core.copy import (
-    FLAT,
+    FOLDERS,
     LAYOUTS,
     MODES,
     CopyError,
@@ -236,10 +236,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_copy = sub.add_parser(
         "copy",
         parents=[common],
-        help="Copy the band files of a subset CSV into one flat output folder.",
+        help="Copy the band files of a subset CSV into a new output folder.",
         description="Copy (or hard-link, or move) the band files of the captures in "
-        "SUBSET_CSV into one folder; each file is named after its folder chain "
-        "(A/B/C/IMG_0000_1.tif -> A_B_C_IMG_0000_1.tif). Every run writes to a new "
+        "SUBSET_CSV into a new folder, with one sub-folder per source folder, named after "
+        "its folder chain (A/B/C/IMG_0000_1.tif -> A_B_C/IMG_0000_1.tif); file names are "
+        "not changed. Every run writes to a new "
         "<ROOT name>_subset_NN folder next to ROOT unless --dest is given. Files already at "
         "the destination with the same size are skipped, so an interrupted run can be "
         "resumed with --dest <its folder>; files with a different size are never overwritten "
@@ -276,9 +277,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_copy.add_argument(
         "--layout",
         choices=LAYOUTS,
-        default=FLAT,
-        help="flat (default): all files in the output folder, named A_B_C_IMG_0000_1.tif; "
-        "folders: one folder per source folder, A_B_C/IMG_0000_1.tif.",
+        default=FOLDERS,
+        help="folders (default): one folder per source folder, file names unchanged "
+        "(A_B_C/IMG_0000_1.tif); flat: all files in one folder and RENAMED to "
+        "A_B_C_IMG_0000_1.tif - make sure your software supports renamed files.",
     )
     p_copy.add_argument(
         "--confirm-move", action="store_true", help="Confirm that --mode move may remove files."
@@ -348,7 +350,8 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         nargs="?",
         metavar="INDEX_CSV",
-        help="Index or subset CSV (MATLAB index CSVs work too, except with --per-folder). "
+        help="Index or subset CSV (CSVs with only the first four index columns work too, "
+        "except with --per-folder). "
         "If left out, a file picker opens.",
     )
     p_footprint.add_argument(
@@ -361,8 +364,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--hull",
         choices=HULLS,
         default="convex",
-        help="convex (default, like the MATLAB tool) or concave: follows L-shaped or "
-        "scattered flights more closely.",
+        help="convex (default) or concave: follows L-shaped or scattered flights more closely.",
     )
     p_footprint.add_argument(
         "--ratio",

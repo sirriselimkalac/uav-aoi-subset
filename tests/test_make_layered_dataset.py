@@ -447,6 +447,11 @@ def test_flat_and_layered_give_the_same_subset(tmp_path):
     assert "RESULT: SAME" in stdout and "more than once" in stdout
 
     plan = plan_copy(out, layered_subset, tmp_path / "dest", skip_duplicates=True)
-    names = [t.destination.name for t in plan.tasks if t.destination is not None]
+    dest = tmp_path / "dest"
+    names = [t.destination.relative_to(dest).as_posix() for t in plan.tasks if t.destination]
     assert len(names) == len(set(names)) == 4 * 7
-    assert "0000SET_000_IMG_0001_1.tif" in names
+    assert "0000SET_000/IMG_0001_1.tif" in names  # default layout: file names unchanged
+    flat = plan_copy(out, layered_subset, dest, skip_duplicates=True, layout="flat")
+    flat_names = [t.destination.name for t in flat.tasks if t.destination is not None]
+    assert len(flat_names) == len(set(flat_names)) == 4 * 7
+    assert "0000SET_000_IMG_0001_1.tif" in flat_names
