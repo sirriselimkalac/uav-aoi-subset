@@ -26,6 +26,7 @@ from uav_aoi_subset.core.copy import (
     plan_copy,
     required_space,
     write_copy_report,
+    write_new_copy_report,
 )
 from uav_aoi_subset.core.discovery import DEFAULT_PATTERN
 from uav_aoi_subset.core.duplicates import can_detect, drop_duplicates, find_duplicates
@@ -779,7 +780,7 @@ def _run_copy(args: argparse.Namespace) -> int:
             failed = exc
         except KeyboardInterrupt:
             progress.finish()
-            _write_report_quietly(plan, args.report or default_report_path(plan.dest))
+            _write_report_quietly(plan, args.report)
             print(
                 "\nUnfinished files were removed. To resume, run the same command "
                 f'with --dest "{plan.dest}"',
@@ -790,13 +791,12 @@ def _run_copy(args: argparse.Namespace) -> int:
             progress.finish()
 
     _print_copy_summary(plan, dry_run=args.dry_run)
-    report = args.report or (None if args.dry_run else default_report_path(plan.dest))
-    if report is not None:
+    if args.report is not None or not args.dry_run:
         try:
-            write_copy_report(plan.tasks, report)
+            report = _write_report(plan, args.report)
             print(f"\nReport written to: {report}")
         except OSError as exc:
-            return _cannot_write(report, exc, "--report")
+            return _cannot_write(args.report or default_report_path(plan.dest), exc, "--report")
     if failed is not None:
         print(file=sys.stderr)
         return _error(str(failed))
@@ -804,10 +804,18 @@ def _run_copy(args: argparse.Namespace) -> int:
     return 1 if st["conflict"] or st["failed"] else 0
 
 
-def _write_report_quietly(plan: CopyPlan, report: Path) -> None:
+def _write_report(plan: CopyPlan, report: Path | None) -> Path:
+    """Write to --report, or to a new default-named file that never replaces an older one."""
+    if report is None:
+        return write_new_copy_report(plan.tasks, plan.dest)
+    write_copy_report(plan.tasks, report)
+    return report
+
+
+def _write_report_quietly(plan: CopyPlan, report: Path | None) -> None:
     """Best effort after an interruption: the report shows what was done so far."""
     try:
-        write_copy_report(plan.tasks, report)
+        report = _write_report(plan, report)
         print(f"\nReport of the files done so far: {report}", file=sys.stderr)
     except OSError:
         pass

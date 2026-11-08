@@ -222,11 +222,15 @@ def default_dest(root: Path) -> Path:
     return folder / f"{project}_subset_{n:02d}"
 
 
-def default_report_path(dest: Path, now: dt.datetime | None = None) -> Path:
-    """``<dest>_copy_report_YYYYMMDD-HHMMSS.csv`` next to the output folder."""
+def default_report_path(dest: Path, now: dt.datetime | None = None, number: int = 1) -> Path:
+    """``<dest>_copy_report_YYYYMMDD-HHMMSS.csv`` next to the output folder.
+
+    ``number`` 2, 3... adds ``_2``, ``_3``... for runs that start within the same second.
+    """
     now = now or dt.datetime.now()
     dest = Path(dest)
-    return dest.with_name(f"{dest.name}_copy_report_{now:%Y%m%d-%H%M%S}.csv")
+    suffix = f"_{number}" if number > 1 else ""
+    return dest.with_name(f"{dest.name}_copy_report_{now:%Y%m%d-%H%M%S}{suffix}.csv")
 
 
 def assign_flat_folders(rel_folders: Iterable[tuple[str, ...]]) -> dict[tuple[str, ...], str]:
@@ -741,8 +745,30 @@ def summarize(plan: CopyPlan) -> CopySummary:
     )
 
 
-def write_copy_report(tasks: Iterable[FileTask], path: Path) -> None:
-    with _fs(path).open("w", encoding=CSV_ENCODING, newline="") as f:
+def write_new_copy_report(
+    tasks: Iterable[FileTask], dest: Path, now: dt.datetime | None = None
+) -> Path:
+    """Write the report under the default name without replacing an existing report.
+
+    A second run within the same second (a resume right after a finished copy) gets
+    ``..._2.csv``, ``..._3.csv``... The file is created exclusively, so two runs can never
+    write into one report. Returns the path written.
+    """
+    now = now or dt.datetime.now()
+    tasks = list(tasks)
+    number = 1
+    while True:
+        path = default_report_path(dest, now, number)
+        try:
+            write_copy_report(tasks, path, exclusive=True)
+            return path
+        except FileExistsError:
+            number += 1
+
+
+def write_copy_report(tasks: Iterable[FileTask], path: Path, *, exclusive: bool = False) -> None:
+    """Write the per-file report; ``exclusive`` refuses to replace an existing file."""
+    with _fs(path).open("x" if exclusive else "w", encoding=CSV_ENCODING, newline="") as f:
         writer = csv.writer(f)
         writer.writerow(REPORT_COLUMNS)
         for t in tasks:

@@ -21,6 +21,7 @@ from uav_aoi_subset.core.copy import (
     long_path,
     plan_copy,
     write_copy_report,
+    write_new_copy_report,
 )
 from uav_aoi_subset.core.discovery import OUTPUT_MARKER, discover_captures
 from uav_aoi_subset.core.index import CSV_ENCODING, IndexRecord, write_index_csv
@@ -146,6 +147,24 @@ def test_default_report_path(tmp_path):
 
     path = default_report_path(tmp_path / "out", dt.datetime(2026, 10, 28, 9, 5, 3))
     assert path == tmp_path / "out_copy_report_20261028-090503.csv"
+
+
+def test_reports_in_the_same_second_never_replace_each_other(tree, tmp_path):
+    import datetime as dt
+
+    now = dt.datetime(2026, 11, 8, 7, 36, 8)
+    dest = tmp_path / "out"
+    plan = plan_copy(tree, records_for(tree), dest)
+    first = write_new_copy_report(plan.tasks, dest, now)
+    first.write_text("first run", encoding=CSV_ENCODING)
+    second = write_new_copy_report(plan.tasks, dest, now)
+    third = write_new_copy_report(plan.tasks, dest, now)
+    assert first == tmp_path / "out_copy_report_20261108-073608.csv"
+    assert second == tmp_path / "out_copy_report_20261108-073608_2.csv"
+    assert third == tmp_path / "out_copy_report_20261108-073608_3.csv"
+    assert first.read_text(encoding=CSV_ENCODING) == "first run"
+    with pytest.raises(FileExistsError):
+        write_copy_report(plan.tasks, first, exclusive=True)
 
 
 # --- flattening, matching, missing bands --------------------------------------------------

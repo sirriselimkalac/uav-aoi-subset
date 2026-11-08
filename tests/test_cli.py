@@ -306,6 +306,12 @@ def test_copy_end_to_end(copy_inputs, tmp_path, capsys):
     assert "Include files:      1" in out
     (report,) = dest.parent.glob("Kampanya_subset_01_copy_report_*.csv")
     assert "copied" in report.read_text(encoding="utf-8-sig")
+
+    # Resuming right away (possibly in the same second) keeps the first report.
+    assert main([*args, "--dest", str(dest)]) == 0
+    reports = sorted(dest.parent.glob("Kampanya_subset_01_copy_report_*.csv"))
+    assert len(reports) == 2
+    assert reports[0] == report and "copied" in report.read_text(encoding="utf-8-sig")
     assert "Kuzey_image_index_20261028.csv" in (dest / OUTPUT_MARKER).read_text(encoding="utf-8")
 
     # A second run writes a new folder ...
