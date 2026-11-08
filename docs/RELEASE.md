@@ -2,7 +2,10 @@
 
 The release happens in two stages:
 
-- **A. Public, without a tag** (the weekend before the Monday run). The code is tested
+Decided 2026-11-08: the repository goes public only **after** the Monday checklist has passed,
+together with v0.1.0; the Monday agent works from [MONDAY_RUN.md](MONDAY_RUN.md).
+
+- **A. Public gate**. The code is tested
   automatically on Windows, macOS and Linux, and was run on the public blueberry dataset and
   its layered copy on a Linux machine (see [VALIDATION.md](VALIDATION.md), *Pre-release run*).
 - **B. v0.1.0** (after the Monday run on the work computer): the manual checklist in
@@ -13,7 +16,8 @@ The release happens in two stages:
 
 Claude prepares and checks; the user switches the visibility on GitHub.
 
-- [ ] `docs/IS_BILGISAYARI.md` (internal work-computer notes) is deleted.
+- [ ] `docs/IS_BILGISAYARI.md` and `docs/MONDAY_RUN.md` (internal work-computer notes) are
+      deleted, and the Monday notes are gone from `CLAUDE.md`.
 - [ ] `git log -p --all` contains no private paths, user names, real campaign or project
       names, or coordinates other than the blueberry field and synthetic test values. Search
       for `C:\Users`, `/Users/`, drive paths and coordinate-like numbers.
@@ -62,14 +66,14 @@ attribution visible in Google Earth shots):
 | `01_google_earth_aoi.png` | `blueberries.kml` and `area-of-interest.kml` over the field |
 | `02_index.png` | terminal: `index` summary |
 | `03_copy.png` | terminal: `copy` summary, including the report path |
-| `04_layered_footprint.png` | the `--per-folder 1` footprint of the layered copy with the cross AOI |
+| `04_layered_footprint.png` | the `--per-folder 1` footprint of the layered copy with `examples/area-of-interest.kml` |
 | `05_verify.png` | terminal: `make_layered_dataset.py verify` printing `RESULT: SAME` |
 
 Facts for the README, written into the VALIDATION.md results: the exact commands as run,
 capture counts per AOI, files copied and size, timings of `index`, `copy` and the resume run,
 anything in the README that was unclear.
 
-### B2. On the Mac (Claude does this)
+### B2. Release (on the work computer, by the agent there; see MONDAY_RUN.md)
 
 1. `git pull`. Every check in VALIDATION.md is pass or n.a.; every issue is closed or fixed.
 2. Fix findings, if any. A fix that changes behaviour is re-checked before the tag.
@@ -77,5 +81,5 @@ anything in the README that was unclear.
    *layered copy* section against the Monday notes, keep *Positional accuracy*
    and *Tested setup and compatibility*. Never fill in the `<!-- AUTHOR: ... -->` blocks: the
    user writes them.
-4. Version `0.1.0` in `pyproject.toml`, `uv lock`; classifier "Alpha".
+4. Version `0.1.0` in `pyproject.toml`, `uv lock`; classifier "Alpha" (done 2026-11-08).
 5. CI green, then the user approves: tag `v0.1.0` and a GitHub release with short notes.

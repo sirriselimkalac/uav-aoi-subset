@@ -182,8 +182,9 @@ deleted; **server pre-release run passed**, numbers in VALIDATION.md *Pre-releas
 reports never replace each other; example files `examples/blueberries.kml`,
 `examples/area-of-interest.kml`; README *Example dataset* rewritten as "try it the way we
 tested it" and run as written on the server; 277 tests).
-Package version is `0.0.1` until the v0.1.0 tag. The repo goes public untagged (stage A, the
-user flips it); v0.1.0 after the Monday run (stage B).
+Package version is already `0.1.0` (set 2026-11-08, no tag yet). Decided 2026-11-08: the repo
+stays private until the Monday checklist has passed; then the v0.1.0 tag (with the user's yes)
+and the user makes it public.
 
 Decisions made so far:
 - `core/discovery.py` holds the ONE sanitizer (`sanitize_token`, `flat_folder_name`,
@@ -355,7 +356,9 @@ Pythons), `env.sh`, `repo/` (clone of a `git bundle`; patched files are copied i
 `readme_run/` (may be deleted). Check scripts live in the session scratchpad only.
 
 Next: **Monday 2026-11-09, the manual checklist on the work computer** (Windows, Google Earth
-Pro), `docs/VALIDATION.md` M1–M18, about one hour, then the stage B assets:
+Pro), `docs/VALIDATION.md` M1–M18, about one hour, then the stage B assets, the tag and the
+public switch. **The agent there follows `docs/MONDAY_RUN.md`** (prompt, install state, steps,
+images, public gate, tag commands, release notes); the Mac session is not available. Summary:
 - Internal notes for that session (not in the public docs): `$Demo = "D:\uav-demo"`,
   `$Data = "D:\altum-pt-blueberries-60m-sample-data\altum-pt-blueberries-60m-sample-data"`
   (already downloaded and extracted). Hard links need `$Lay` and the M9 `--dest` on **D:**; for

@@ -1,6 +1,6 @@
 [project]
 name = "uav-aoi-subset"
-version = "0.0.1"
+version = "0.1.0"
 description = "Split large multispectral UAV image sets into subsets inside a KML/KMZ area of interest."
 readme = "README.md"
 license = "MIT"
@@ -21,7 +21,7 @@ keywords = [
     "gis",
 ]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
