@@ -38,5 +38,5 @@ desktop.ini
 .vscode/
 *.swp
 
-# Local test AOI (not an example file)
-docs/area-of-interest.kml
+# Local test AOI outside the example field (not an example file)
+docs/area-of-interest-v1.kml

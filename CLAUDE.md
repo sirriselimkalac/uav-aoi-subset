@@ -14,10 +14,23 @@ Global Mapper Pro for this job.
 It is step 1 of a pipeline the author is building:
 raw captures → **AOI subset (this repo)** → Pix4D processing → ML tiling (separate future repo).
 
-## Reference implementation (MATLAB) — port faithfully, then improve
+## Scope (decided 2026-11-07, permanent)
 
-The working MATLAB originals live one level up, in `../` (NOT part of this repo, never
-copy them in — they contain private local paths and project names):
+- **How photogrammetry software imports a subset is out of scope.** The tool delivers plain
+  folders and CSV files and assumes nothing about what happens after that. No checks, docs or
+  options for a particular program's import behaviour.
+- **No MATLAB comparison.** This is an independent implementation; correctness is shown by
+  the test suite and by the known numbers of the public blueberry dataset. The MATLAB files
+  below are historical reference only (`scripts/compare_outputs.py` was removed).
+- **No validation with real campaign data** (the old Phases 4–5). It is replaced by the
+  layered copy of the blueberry dataset (`examples/make_layered_dataset.py`) and the
+  synthetic scale test (`scripts/bench_scan.py`).
+
+## Reference implementation (MATLAB), historical
+
+The command logic was first ported from the author's MATLAB scripts. They live one level up,
+in `../` (NOT part of this repo, never copy them in — they contain private local paths and
+project names). They are kept only as a historical reference:
 
 | MATLAB file | Becomes |
 |---|---|
@@ -28,7 +41,7 @@ copy them in — they contain private local paths and project names):
 | `../EXPORT_TIFF_EXIF_TO_TXT.m` | debugging aid only; maybe `inspect` later |
 | `../BUILD_PROJECT_IMAGE_INDEX_NATIVEGPS_v0*.m` | old experiments, ignore unless asked |
 
-Read the relevant `.m` file before implementing each command. Behaviour to preserve:
+Behaviour taken over from them (still valid):
 
 - **Capture grouping.** MicaSense writes one file per band: `IMG_0000_1.tif … IMG_0000_7.tif`
   in the same folder. A *capture* = folder + `IMG_####` base. Band count must be a
@@ -46,11 +59,13 @@ Read the relevant `.m` file before implementing each command. Behaviour to prese
   copy → a new `<project>_subset_NN` folder next to the project root (first free number, so
   runs with different AOIs never write into each other; the user asked for this in
   milestone 5, replacing MATLAB's "folder named after the CSV"); footprint → `<csv stem>.kml`.
-- **Flattening on copy.** Default `--layout flat` (the user's choice in milestone 5): every
-  file lands directly in the output folder, named after its folder chain
-  (`A/B/C/IMG_0000_1.tif` → `A_B_C_IMG_0000_1.tif`), so Pix4Dmapper gets one folder of
-  images. `--layout folders` keeps MATLAB's one folder per source folder (`A_B_C/IMG_…`).
-  Folder-name collisions get `_v02`, `_v03`… suffixes in both layouts.
+- **Flattening on copy.** Default `--layout folders` (decided 2026-11-07, replacing the
+  milestone-5 flat default): one output folder per source folder, named after its folder
+  chain, file names unchanged (`A/B/C/IMG_0000_1.tif` → `A_B_C/IMG_0000_1.tif`).
+  `--layout flat` is optional: every file directly in the output folder and renamed
+  (`A_B_C_IMG_0000_1.tif`); help text and README warn that it renames files and the user
+  must check that their software supports that. Folder-name collisions get `_v02`, `_v03`…
+  suffixes in both layouts.
 - **Summary report**: totals, not found, incomplete captures, files copied.
 - **KML coordinates** are `lon,lat[,alt]`; multiple polygons are combined with OR.
 
@@ -135,20 +150,19 @@ to file/folder pickers (tkinter) — this mirrors the MATLAB `uigetdir`/`uigetfi
    calibration-panel shots) + tests.
 5. **footprint**.
 6. Picker fallback, progress bars, polished errors.
-7. **Real-data validation on the work computer** following `docs/VALIDATION.md`, in five
-   phases: (1) install from the README only, (2) blueberry dataset, (3) same data with unusual
-   KMLs, (4) real campaign data (anonymous numbers only), (5) real data with ROOT one level too
-   high. Record the results there, file every finding as an issue with the bug report form, fix
-   on the Mac, re-validate.
-8. **README assets and README**: after all checks pass, prepare the example KMLs and the
-   screenshots on the work computer (list in `docs/RELEASE.md` section A) and push them from
-   there; then finish the README on the Mac (worked example with the public EagleNXT Altum-PT
-   blueberry dataset, link only, never redistribute the data).
-9. **Public gate** (`docs/RELEASE.md` section B): make the repo public and tag **v0.1.0** ONLY
-   when every check in `docs/VALIDATION.md` has passed on the commit to be tagged (or fixes
-   since were re-validated), the assets are committed and the README is complete. The user
-   does not want untested code to be public. Never make the repo public earlier, and never
-   suggest doing so.
+7. **Blueberry validation.** (a) Automated pre-release run on the user's Linux server
+   (`ssh malikane`, everything under `~/uav-demo` only, no sudo): the public dataset and its
+   layered copy, numbers in `docs/VALIDATION.md` *Pre-release run*. (b) The short manual
+   checklist in `docs/VALIDATION.md` on the work computer (Windows, Google Earth Pro), about
+   one hour. Every finding becomes an issue (bug report form), fixed on the Mac.
+8. **README assets and worked example** (`docs/RELEASE.md` B): example KMLs, images
+   (`docs/images/blueberry_mosaic_extent.png` and the rest), the worked example with the public
+   EagleNXT Altum-PT blueberry dataset (link only, never redistribute the data).
+9. **Release in two stages** (`docs/RELEASE.md`): (A) the repository is made public without a
+   tag once the automated tests are green and the pre-release run and the public-gate checks
+   have passed (decided 2026-11-07; the user flips the visibility, Claude never does);
+   (B) **v0.1.0** is tagged only after the manual checklist has passed and milestone 8 is
+   done. Claude never creates the tag without the user's go-ahead.
 Later: Docker image (secondary distribution), tkinter GUI, QGIS plugin, benchmarks.
 
 ## Status (update at the end of each milestone)
@@ -161,8 +175,15 @@ Done: **1 scaffold**, **2 index** (CI green on ubuntu/macOS/windows × Python 3.
 scan benchmark; Windows README; bug report form; five-phase VALIDATION.md; CI green on all
 6 jobs, 249 tests).
 **one-folder example data + layered-copy helper** (`examples/make_layered_dataset.py`, README
-section, VALIDATION Phase 3B; CI green on all 6 jobs, 276 tests).
-Package version is `0.0.1` until the v0.1.0 tag (milestone 8). Repo is private until then.
+section; CI green on all 6 jobs, 276 tests).
+**public-release prep, 2026-11-07/08** (scope decisions; copy default `--layout folders`;
+`compare_outputs.py` removed; short M1–M18 checklist; two-stage RELEASE.md; IS_BILGISAYARI.md
+deleted; **server pre-release run passed**, numbers in VALIDATION.md *Pre-release run*; copy
+reports never replace each other; example files `examples/blueberries.kml`,
+`examples/area-of-interest.kml`; README *Example dataset* rewritten as "try it the way we
+tested it" and run as written on the server; 277 tests).
+Package version is `0.0.1` until the v0.1.0 tag. The repo goes public untagged (stage A, the
+user flips it); v0.1.0 after the Monday run (stage B).
 
 Decisions made so far:
 - `core/discovery.py` holds the ONE sanitizer (`sanitize_token`, `flat_folder_name`,
@@ -231,7 +252,10 @@ Decisions made so far:
   must be ≥ needed × 1.02 + 100 MB. All file-system calls go through `long_path` (`\\?\` on
   Windows); paths > 259 chars give a Pix4D warning. Report CSV columns `Kind, RecordName, Band,
   Source, Destination, Status, Bytes, Message`, written next to the dest with a timestamp; dry
-  runs write it only with `--report`. The marker file records Created / ROOT / Subset CSV.
+  runs write it only with `--report`. The default report name gets `_2`, `_3`… when taken and
+  is created exclusively (`write_new_copy_report`), so a resume in the same second never
+  replaces the first report; an explicit `--report` path is overwritten. The marker file
+  records Created / ROOT / Subset CSV.
   `--layout flat` names = `flat_folder + "_" + original file name`; `_DestListing` finds
   existing files by (prefix, BASE, band) by trying the pattern after every `_`, so resume and
   move detection work in both layouts; any two tasks with the same destination (NFC,
@@ -280,28 +304,37 @@ Decisions made so far:
   in the main `--help` epilog and the README. `--version` (custom action, runs ExifTool only then)
   prints package, Python + platform, `ExifTool <ver> at <path>` or "not found on PATH".
 
-Validation prep is in place: `docs/VALIDATION.md` (work-computer checklist in five phases:
-Phase 1 = P1–P7 + snag log, README only; Phase 2 = blueberry V1–V69 (footprint V20–V20g,
-Pix4D flat layout V50, `--version` V4, pickers / progress / Ctrl+C / permission V60–V69);
-Phase 3 = unusual KMLs V70–V72 (V73 n.a.) + layered copy V74–V79; Phase 4 = real campaign V80–V87, privacy rules first; Phase 5 =
-ROOT too high V90–V93; results tables per phase with an issue column), `docs/RELEASE.md`
-(README asset list + public gate), `.github/ISSUE_TEMPLATE/bug_report.yml` (issue form with
-privacy warning and checkbox; blank issues disabled), `scripts/compare_outputs.py`,
+Validation material: `docs/VALIDATION.md` (short M1–M18 checklist for the work computer,
+results table, Phase 1 snag log, *Pre-release run* numbers from the server), `docs/RELEASE.md`
+(stage A public gate, stage B assets + tag), `.github/ISSUE_TEMPLATE/bug_report.yml`,
 `scripts/bench_scan.py`, `.gitattributes` (LF in the repo, also for commits from Windows).
 README *Installation* is written for an ordinary Windows user (uv/ExifTool without admin or
 scripts, `exiftool(-k).exe` rename, `--exiftool`, user PATH, new window, ZIP without Git,
-troubleshooting table). Not yet run on real data.
+troubleshooting table).
 
-Example data and the layered copy (decided 2026-10-28):
+Example data and the layered copy (decided 2026-10-28, updated 2026-11-08):
 - The blueberry dataset is published as **one folder** (`altum-pt-blueberries-60m-sample-data`):
   3,361 files (3,360 TIFFs + panel CSV), no sub-folders; ZIP 20,822,285,409 B, extracted
   27,278,926,830 B. Its page states no licence: we only link to it, never redistribute.
-  Phase 2 expectations are written for one folder (V14/V42 n.a., V20d one `(root)` polygon,
-  no renaming in V31, V50 only flat import).
+  Two captures (`IMG_0000`, `IMG_0479`) are panel shots on the ground; they lie inside the
+  flight footprint.
+- **The README story (the user's wording, 2026-11-08):** the promise is "at any folder depth,
+  the TIFFs inside an AOI go into a new sub-folder, with hard links without extra disk space".
+  The blueberry data is there so a user can try the tool before using it on their own raw data,
+  the way we tested it: download → layer with `make_layered_dataset.py` → ready KMLs in
+  `examples/` → process like real sensor data → `verify`. Do not call the files "GeoTIFF"
+  (positions come from EXIF GPS, not from GeoTIFF georeferencing).
+- Example files: `examples/blueberries.kml` (field outline = `footprint` of the 478 flight
+  captures, 5.89 ha; 480 inside, 600 on the layered copy) and `examples/area-of-interest.kml`
+  (the user's ~1 ha AOI, cleaned to plain KML; 74 inside, 113 on the layered copy with 39
+  copies, 74 with `--skip-duplicates`). It touches only `0001SET`/`0002SET`, so it does not show
+  the same name from different sets; a cross-band example may be added later.
+  `docs/area-of-interest-v1.kml` (a first AOI ~4.5 km east of the field, 0 captures) is
+  git-ignored and never published.
 - `examples/make_layered_dataset.py` is a **public helper script, not part of the package**
   (no console script; `uv run python examples/make_layered_dataset.py build|verify`). The README
-  (*Example dataset → Optional: a layered copy of the example data*) explains it; using it is
-  optional, the tool works with flat data. Stdlib + `core` + `console.ConsoleProgress`; no brands.
+  (*Example dataset → A layered copy of the example data*) explains it; the tool itself does not
+  need it. Stdlib + `core` + `console.ConsoleProgress`; no brands.
   `build`: top-level files of INPUT only (sub-folders ignored with a warning, files written by
   this tool skipped), captures sorted by the trailing number of `base`, `--parts` (4) consecutive
   groups → `{g:04d}SET/{n:03d}` (`--folder-captures` 200 per sub-folder), numbering restarts per
@@ -310,45 +343,34 @@ Example data and the layered copy (decided 2026-10-28):
   (same drive, no fallback); OUTPUT new or empty, outside INPUT; space check with
   `copy.required_space`; mapping CSV `<OUTPUT>_mapping.csv` **next to** OUTPUT (columns
   `OriginalFile, OriginalImageBase, OriginalRecordName, Group, Kind, NewPath, NewRelativeFolder,
-  NewImageBase, NewRecordName`; record names via `discovery.record_name`). `verify MAPPING FLAT
-  LAYERED`: both subsets mapped back to original bases (ImageBase / (RelativeFolder, ImageBase),
-  else RecordName, so MATLAB CSVs work); SAME only if the sets match; copies listed but not a
-  difference. Tests in `tests/test_make_layered_dataset.py`.
-- VALIDATION Phase 3B runs the script **from the README instructions** (also tests the README),
-  with cross-line AOIs `blueberry_aoi_cross_all.kml` / `_cross_two.kml` (public examples) and
-  screenshots 11–13 (RELEASE.md A). The V50 question (renamed bands grouped in Pix4D?) moved to
-  **V77e**.
+  NewImageBase, NewRecordName`; `OriginalFile` is the file name relative to INPUT; record names
+  via `discovery.record_name`). `verify MAPPING FLAT LAYERED`: both subsets mapped back to
+  original bases (ImageBase / (RelativeFolder, ImageBase), else RecordName, so MATLAB CSVs work);
+  SAME only if the sets match; copies listed but not a difference. Tests in
+  `tests/test_make_layered_dataset.py`.
 
-Next: **milestone 7, real-data validation on the work computer** (Windows). Everything is run
-from `docs/VALIDATION.md` top to bottom, phase by phase; results (numbers only) go into its
-*Results* tables and are pushed from there before the clone is deleted. Every finding is opened
-as a GitHub issue with the bug report form (no coordinates, names, paths or screenshots of real
-data: issues become public with the repo). Take to that session:
-- **Phase 1 first, with the README only** (do not read VALIDATION.md beyond Phase 1 until it is
-  done); keep the snag log. This also installs the tools (uv, ExifTool; Git is needed from
-  Phase 2 on). GitHub sign-in through Git Credential Manager (repo is private); repo-local git
-  identity with the noreply email (commands in Phase 2, 2.1). Delete the stored credentials in
-  *Finish and clean up*.
-- Phases 4–5 use real campaign data: outputs only in `C:\uav-demo\private`, anonymous numbers
-  only in the repo. Delete the Phase 5 outputs on the campaign drive afterwards.
-- Dataset: download the EagleNXT blueberry ZIP (20,822,285,409 B), extract, move the one folder
-  `altum-pt-blueberries-60m-sample-data` to `C:\uav-demo\data\blueberry`; expect 3,361 files,
-  3,360 TIFFs, no sub-folders, 480 captures, all complete with `--bands 7`. Phase 3B makes the
-  layered copy `C:\uav-demo\data\blueberry_layered` with hard links (README route). MATLAB and the `.m` scripts already on the work computer are used for 2.7 and
-  V84 (if missing, bring them over privately, never through the repository).
-- Draw the AOIs in Google Earth Pro (2.5); they become the `examples/` KMLs (RELEASE.md A).
-  Phase 3 needs QGIS for V70.
-- Open questions to answer there: V77e — does Pix4Dmapper group the 7 bands of the renamed flat
-  files (only the layered copy has renamed files)? If not, switch the default to `--layout folders` (on the Mac). V41 — long paths in
-  Explorer/Pix4D. V60/V66 — pickers sharp on high DPI and in front, bar not wrapping in the
-  Windows console. V20c — which footprint buffer matches the Pix4D mosaic. Phase 1 — which
-  install route works on a company computer. V91/V92 — are duplicates and project folders
-  handled well enough, or is a default `--exclude` list needed?
-- Also collect the RELEASE.md section A assets (screenshots, example KMLs, README facts) in the
-  same visit (blueberry only), then push everything from the work computer (*Finish and clean
-  up*).
-- Back on the Mac: fix findings, re-validate on the work computer if code changed; then
-  milestone 8 (README) and 9 (public gate).
+Server (`ssh malikane`, everything in `~/uav-demo`): `tools/` (uv, ExifTool 13.61, uv cache and
+Pythons), `env.sh`, `repo/` (clone of a `git bundle`; patched files are copied in with `scp`),
+`data/blueberry` (the dataset, keep it), test outputs in `data/`, `results/`, `aoi/`,
+`readme_run/` (may be deleted). Check scripts live in the session scratchpad only.
+
+Next: **Monday 2026-11-09, the manual checklist on the work computer** (Windows, Google Earth
+Pro), `docs/VALIDATION.md` M1–M18, about one hour, then the stage B assets:
+- Internal notes for that session (not in the public docs): `$Demo = "D:\uav-demo"`,
+  `$Data = "D:\altum-pt-blueberries-60m-sample-data\altum-pt-blueberries-60m-sample-data"`
+  (already downloaded and extracted). Hard links need `$Lay` and the M9 `--dest` on **D:**; for
+  a cross-drive test use C:. Repo-local git identity with the noreply email; delete the clone
+  and any stored GitHub credentials afterwards.
+- Order: M1–M10 (one-folder data, `examples/` KMLs), M11–M18 (layered copy; M12 also with
+  `examples/area-of-interest.kml`, expected flat 74 / layered 113 / SAME); note times, counts,
+  anything in the README that was unclear; findings → GitHub issues (bug report form).
+- Collect the RELEASE.md B1 images (`blueberry_mosaic_extent.png`, 01–05), numbers only in the
+  VALIDATION results table, push from the work computer.
+- Back on the Mac: fix findings, README images and final check, version 0.1.0 + `uv lock`, CI
+  green, tag only with the user's go-ahead (RELEASE.md B2).
+- Open `<!-- AUTHOR:` blocks for the user: *Why this tool exists*, optional *Positional
+  accuracy* note, *How this was built* (its suggested wording still mentions MATLAB
+  validation), *Author*.
 
 ## Data and privacy rules
 
@@ -357,7 +379,9 @@ data: issues become public with the repo). Take to that session:
   `examples/`.
 - **No real imagery on the development machine.** The blueberry dataset is NOT on this
   Mac and must not be requested here. Everything on this machine is tested with small
-  synthetic data generated by the test suite.
+  synthetic data generated by the test suite. The public blueberry dataset may live on the
+  user's Linux server (`~/uav-demo/data`), never on the Mac; real campaign data is never
+  used anywhere in this project.
 - Commits use the user's GitHub noreply email (already configured by the user).
 
 ## Development and validation workflow (two machines)
@@ -365,20 +389,23 @@ data: issues become public with the repo). Take to that session:
 - **Development machine: the user's personal Mac** (this one). Code, unit tests and
   synthetic data only. Repo lives at `~/Developer/resimleri_bloklara_ayirma/uav-aoi-subset`
   (outside iCloud). MATLAB references are in the parent folder.
-- **Validation machine: the user's work computer (Windows; MATLAB available there).**
-  Real-data runs happen only there, after `git clone` / `git pull` from GitHub.
+- **Linux test server** (`ssh -o BatchMode=yes malikane '<command>'`, user `master`, key
+  only, via Tailscale). Code goes there as a `git bundle` (no GitHub credentials there);
+  uv, ExifTool, data and outputs all under `~/uav-demo` (env in `~/uav-demo/env.sh`); long
+  jobs with `nohup … > ~/uav-demo/logs/<job>.log 2>&1 &`. No sudo, never touch SSH settings,
+  `authorized_keys` or system files.
+- **Manual checks: the user's work computer (Windows).** The short checklist in
+  `docs/VALIDATION.md` runs there after `git clone` / `git pull` from GitHub.
   Dataset: EagleNXT "Altum-PT data of a blueberry field" — 480 captures × 7 bands =
   3,360 TIFFs + 1 calibration-panel reflectance CSV (wavelength 250–950 nm, ~0.5).
 - Therefore the code MUST work on Windows: `pathlib` everywhere, no shell-specific
   commands, UTF-8 / Turkish characters in paths, `exiftool.exe` discovery on Windows,
   CI on `windows-latest`.
-- `docs/VALIDATION.md` is the copy-paste checklist for the work computer (check IDs `V…`,
-  results table at the end). Running it is the FIRST thing to do whenever the repo is pulled
-  there. Keep it up to date: when a command or flag changes, update the affected checks in the
-  same commit. `scripts/compare_outputs.py` compares our CSVs and copy folders with the MATLAB
-  outputs.
-- **The work-computer clone is temporary.** It is deleted after validation and the README
-  assets are done (VALIDATION.md section 9), including the stored GitHub credentials. Only the
+- `docs/VALIDATION.md` is the short copy-paste checklist for the work computer (check IDs
+  `M…`, results table at the end) plus the numbers of the server pre-release run. Keep it up
+  to date: when a command or flag changes, update the affected checks in the same commit.
+- **The work-computer clone is temporary.** It is deleted after the checklist and the README
+  assets are done, including any stored GitHub credentials. Only the
   Mac copy remains. Therefore everything produced there (results, KMLs, screenshots) must be
   committed and pushed from there, data and outputs stay outside the clone
   (`C:\uav-demo\data`, `C:\uav-demo\results`), and the clone uses a repo-local git identity
@@ -401,7 +428,9 @@ data: issues become public with the repo). Take to that session:
   Exceptions that MUST stay, verbatim in meaning, and must never be deleted, shortened or
   "neutralised" by this rule or any later clean-up:
   1. README section **"Tested setup and compatibility"** (marked `<!-- KEEP -->`): the
-     author's honest statement that he tested with a MicaSense Altum-PT and Pix4Dmapper,
+     honest statement that the workflow grew out of the author's field work with a
+     MicaSense Altum-PT and Pix4Dmapper, and that the tool was tested with the public
+     Altum-PT dataset, its layered copy and synthetic data,
      the list of brand-independence measures, the request for feedback via GitHub issues
      and the promise to fix problems, and the trademark note. Update its facts if the code
      changes (e.g. new parameters), but keep all four parts.

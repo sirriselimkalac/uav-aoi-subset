@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Area of interest</name>
+    <Placemark>
+      <name>Area of interest</name>
+      <description>Example AOI inside the blueberry field (about 1 ha)</description>
+      <Style>
+        <LineStyle>
+          <color>ff2dc0fb</color>
+          <width>3</width>
+        </LineStyle>
+        <PolyStyle>
+          <color>40ffffff</color>
+        </PolyStyle>
+      </Style>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>-122.4215350618748,48.50579632070925,0 -122.4199718804038,48.50579845916999,0 -122.4199618861397,48.50659065005649,0 -122.421504590849,48.506590762782,0 -122.4215350618748,48.50579632070925,0</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+  </Document>
+</kml>

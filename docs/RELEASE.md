@@ -1,123 +1,81 @@
-# Release preparation (v0.1.0)
+# Release preparation
 
-The repository becomes public **only** when:
+The release happens in two stages:
 
-1. every check in [VALIDATION.md](VALIDATION.md) (all five phases) has passed on the work
-   computer, on the commit that will be tagged (or on an earlier commit, with the later fixes
-   re-validated there), and every issue opened during validation is closed;
-2. the assets in section A are committed;
-3. the README is complete (section B).
+- **A. Public, without a tag** (the weekend before the Monday run). The code is tested
+  automatically on Windows, macOS and Linux, and was run on the public blueberry dataset and
+  its layered copy on a Linux machine (see [VALIDATION.md](VALIDATION.md), *Pre-release run*).
+- **B. v0.1.0** (after the Monday run on the work computer): the manual checklist in
+  [VALIDATION.md](VALIDATION.md) has passed, the example files and images are committed, the
+  README worked example is written, then the tag.
 
-Untested code is never made public.
+## A. Make the repository public (no tag)
 
-## A. Assets to prepare on the work computer
+Claude prepares and checks; the user switches the visibility on GitHub.
 
-Prepare these **after** all validation checks have passed, so the screenshots show the final
-version. Commit them from the work computer (VALIDATION.md, *Finish and clean up*) before the
-clone there is deleted. Assets come from the public blueberry dataset only (Phases 2–3), never
-from the real campaign data of Phases 4–5.
+- [ ] `docs/IS_BILGISAYARI.md` (internal work-computer notes) is deleted.
+- [ ] `git log -p --all` contains no private paths, user names, real campaign or project
+      names, or coordinates other than the blueberry field and synthetic test values. Search
+      for `C:\Users`, `/Users/`, drive paths and coordinate-like numbers.
+- [ ] `git rev-list --objects --all` contains no imagery, archives or photogrammetry project
+      files.
+- [ ] The commit author email on all commits is the GitHub noreply address.
+- [ ] CLI help (`uav-aoi-subset --help`, each command's `--help`) and the package metadata in
+      `pyproject.toml` name no camera, drone or photogrammetry software brands.
+- [ ] In README.md, brands appear ONLY in *Tested setup and compatibility* (still present,
+      complete and marked `<!-- KEEP -->`) and in the dataset citation.
+- [ ] README links work (the mosaic image is added in stage B), the CI badge is green.
+- [ ] `examples/blueberries.kml` and `examples/area-of-interest.kml` pass the example-file
+      checks in B1; `docs/area-of-interest-v1.kml` (outside the field) stays ignored.
+- [ ] The remaining `<!-- AUTHOR:` blocks are listed for the user (`grep -n "AUTHOR:" README.md`).
+- [ ] The user makes the repository public. No tag yet.
 
-### A1. Example AOI files: `examples/`
+## B. After the Monday run: v0.1.0
+
+### B1. Assets (made on the work computer, from the public blueberry dataset only)
+
+Example AOI files in `examples/` (committed before the repository goes public):
 
 | File | Content |
 |---|---|
-| `examples/blueberry_aoi_north.kml` | one simple polygon over part of the blueberry field |
-| `examples/blueberry_aoi_blocks.kml` | two polygons, one with a hole |
-| `examples/blueberry_aoi_north.kmz` | the same as the first one, as KMZ |
-| `examples/blueberry_footprint.kml` | output of `footprint` for the whole dataset (V20) |
-| `examples/blueberry_aoi_cross_all.kml` | a band across the flight lines that crosses all four set folders of the layered copy (V77) |
-| `examples/blueberry_aoi_cross_two.kml` | a shorter band across the border of two set folders only (V77) |
-| `examples/README.md` | one line per file: what it shows and the capture count it gives with `filter` |
+| `examples/blueberries.kml` | outline of the field: `footprint` of all capture positions (5.89 ha; 480 captures) |
+| `examples/area-of-interest.kml` | the user's AOI of about 1 ha inside the field (74 captures; 113 on the layered copy) |
+| `examples/README.md` | one line per file: what it shows and the capture count `filter` gives |
 
-Before you commit them, open each KML in Notepad and check:
+Possibly later: a band across the flight lines (shows the same file name from different set
+folders), a KML with a hole, a KMZ. For every new example file, open it in a text editor and
+check:
 
-- [ ] Only the AOI placemarks are in it. Nothing from *My Places*, and no other locations.
-- [ ] Names are neutral English, like `North block`. No personal or company names, no file paths.
+- [ ] Only the AOI placemarks are in it. Nothing from *My Places*, no Google Earth web
+      extension data (`ex:extension`), no other locations.
+- [ ] Names are neutral English, like `Area of interest`. No personal or company names, no paths.
 - [ ] All coordinates lie over the public blueberry field.
-- [ ] Each file loads with `aoi filter` (V21–V23 and V77a in VALIDATION.md).
+- [ ] Each file loads with `filter` and gives the count in `examples/README.md`.
 
-### A2. Screenshots: `docs/images/`
-
-General rules:
-
-- PNG, cropped to the relevant window, at most 1600 px wide, preferably under 400 KB each
-  (*Snipping Tool* → *Window* mode).
-- Use the short `C:\uav-demo\...` paths. Your user name, the company name, e-mail, the taskbar,
-  other windows and notifications must not appear.
-- Terminal: a clean prompt (`function prompt { "PS> " }`), a large enough font, and the same
-  window size in every terminal shot.
-- Keep the Google imagery attribution visible in Google Earth screenshots. Google's terms
-  require it.
+Images in `docs/images/` (PNG, cropped to the window, at most 1600 px wide, preferably under
+400 KB; no user name, company name, e-mail, taskbar or notifications; keep the Google imagery
+attribution visible in Google Earth shots):
 
 | File | What it shows |
 |---|---|
-| `01_google_earth_aoi.png` | Google Earth Pro: the footprint and the AOI polygons over the field |
-| `02_google_earth_captures.png` | capture positions (index CSV imported as points), with the subset inside the AOI visible |
-| `03_index.png` | terminal: `index` summary |
-| `04_filter.png` | terminal: `filter` summary for the north AOI |
-| `05_copy_dry_run.png` | terminal: `copy --dry-run` summary |
-| `06_copy.png` | terminal: `copy` summary, including the report path |
-| `07_output_folder.png` | Explorer: the flat output folders and the report CSV next to them |
-| `08_copy_report.png` | the copy report CSV opened in Excel (a few rows) |
-| `09_pix4d_import.png` | Pix4Dmapper: the subset images loaded / the camera positions on the map |
-| `10_pickers.png` | *(milestone 6)* a file/folder picker opened by a command run without arguments |
-| `11_layered_footprint.png` | Google Earth Pro: the four-strip `--per-folder 1` footprint of the layered copy (V76a) with the two cross AOIs |
-| `12_verify.png` | terminal: `make_layered_dataset.py verify` printing `RESULT: SAME` (V77d) |
-| `13_layered_output_folder.png` | Explorer: the flat output of `copy` from the layered copy, with files such as `0000SET_000_IMG_0000_1.tif` and `0001SET_000_IMG_0000_1.tif` side by side (V77b) |
+| `blueberry_mosaic_extent.png` | the processed mosaic extent of the example dataset shown in Google Earth (the README already links to it) |
+| `01_google_earth_aoi.png` | `blueberries.kml` and `area-of-interest.kml` over the field |
+| `02_index.png` | terminal: `index` summary |
+| `03_copy.png` | terminal: `copy` summary, including the report path |
+| `04_layered_footprint.png` | the `--per-folder 1` footprint of the layered copy with the cross AOI |
+| `05_verify.png` | terminal: `make_layered_dataset.py verify` printing `RESULT: SAME` |
 
-### A3. Facts for the README
+Facts for the README, written into the VALIDATION.md results: the exact commands as run,
+capture counts per AOI, files copied and size, timings of `index`, `copy` and the resume run,
+anything in the README that was unclear.
 
-Write these into the results section of VALIDATION.md. It will be committed together with the
-assets.
+### B2. On the Mac (Claude does this)
 
-- [ ] Dataset citation: exact title, publisher/authors, year, landing-page URL, DOI if any,
-      **licence**. Copy them from the download page.
-- [ ] Dataset folder layout: one folder, 3,361 files (known; confirm in 2.1).
-- [ ] The exact commands used for the worked example, as run.
-- [ ] Counts: captures in the index, captures inside each example AOI, files copied, size.
-- [ ] Timings: `index` (ours and MATLAB), `copy`, the resume run, `make_layered_dataset.py build`
-  (hard links) and `index` of the layered copy.
-- [ ] Layered copy: the commands of the README walk-through as run, counts per set folder for
-  both cross AOIs, and anything in that README section that was unclear (V74).
-- [ ] Windows notes found during validation: ExifTool install, long paths, Excel and CSV
-      separators, antivirus slow-downs.
-- [ ] Known limitations to state in the README.
-
-## B. On the Mac, after the work computer is done (Claude does this)
-
-1. `git pull`. Check the new files and the results table. Every check is pass or n.a.
-2. Fix findings, if any. A fix that changes behaviour needs another visit to the work computer
-   before release.
-3. Write the final README:
-   - overview, the pipeline diagram, a short "why";
-   - installation (macOS / Windows / Linux, ExifTool);
-   - a worked example with the blueberry dataset (link only), the commands, the screenshots and
-     the counts;
-   - command reference for `index`, `filter`, `copy` and `footprint`;
-   - safety notes (`--dry-run`, resume, `--confirm-move`, the marker file), limitations;
-   - how to cite the dataset, licence.
-   - Check the *Optional: a layered copy of the example data* section against the V74 notes and
-     add the screenshots 11–13 and the cross AOIs there.
-   - Remove the "work in progress" status note.
-   - Keep the "Positional accuracy" section; add measured numbers only if the user gives them.
-   - Never fill in the `<!-- AUTHOR: ... -->` blocks: ask the user to write them (why the tool
-     exists, how it was built, author/contact, the optional field note).
-4. Public gate. Check each item:
-   - [ ] `docs/IS_BILGISAYARI.md` (internal notes for the work-computer sessions) is deleted.
-   - [ ] `git log -p --all` contains no private paths, real campaign or project names, or
-         coordinates other than the blueberry field. Search for terms such as `C:\Users`,
-         `/Users/`, campaign names and `.tif`.
-   - [ ] `git rev-list --objects --all` contains no imagery, archives or Pix4D files.
-   - [ ] README links work, images render, the CI badge is green.
-   - [ ] No `<!-- AUTHOR:` placeholder is left in README.md (`grep -n "AUTHOR:" README.md`):
-         the user has written every block.
-   - [ ] CLI help (`uav-aoi-subset --help`, each command's `--help`) names no camera, drone or
-         photogrammetry software brands. In README.md, brands appear ONLY in the
-         "Tested setup and compatibility" section (which must still be present, complete
-         and marked `<!-- KEEP -->`) and in the dataset citation.
-   - [ ] Package metadata in `pyproject.toml` (description, keywords, classifiers) names no
-         camera, drone or photogrammetry software brands.
-   - [ ] Version `0.1.0` in `pyproject.toml`; `uv lock`; the classifier is still
-         "Pre-Alpha"/"Alpha" as appropriate.
-   - [ ] The commit author email on all commits is the GitHub noreply address.
-5. Make the repository public, tag `v0.1.0` and create a GitHub release with short notes.
+1. `git pull`. Every check in VALIDATION.md is pass or n.a.; every issue is closed or fixed.
+2. Fix findings, if any. A fix that changes behaviour is re-checked before the tag.
+3. README: add the images to *Example dataset*, check its commands and counts and the
+   *layered copy* section against the Monday notes, keep *Positional accuracy*
+   and *Tested setup and compatibility*. Never fill in the `<!-- AUTHOR: ... -->` blocks: the
+   user writes them.
+4. Version `0.1.0` in `pyproject.toml`, `uv lock`; classifier "Alpha".
+5. CI green, then the user approves: tag `v0.1.0` and a GitHub release with short notes.

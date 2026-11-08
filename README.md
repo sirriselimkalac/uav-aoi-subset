@@ -7,15 +7,19 @@ file per band, 100,000+ images per campaign) into subsets that fall inside an ar
 interest (AOI) drawn as a polygon in Google Earth or any GIS (KML/KMZ), so that each subset
 can be processed separately in your photogrammetry software.
 
+In short: point it at a project folder (the images can sit at any folder depth) and an AOI
+file, and it puts the images that fall inside the AOI into a new sub-folder. With
+`--mode hardlink` this takes no extra disk space.
+
 A free, open-source alternative to commercial GIS tools for this one job.
 
 <!-- AUTHOR: "Why this tool exists" — 2-3 sentences in your own words: the field problem
      you hit (dataset too large to process in one go, splitting by hand, paying for a GIS
      licence only for this step) and why you built this. Keep it free of brand names. -->
 
-> **Status:** work in progress, not yet validated on real data. All four commands (`index`,
-> `filter`, `copy`, `footprint`) work and are tested on Windows, macOS and Linux with
-> synthetic data.
+> **Status: alpha.** Automated tests run on Windows, macOS and Linux. Before you use it on your
+> own data, you can try it on a public dataset the way we tested it (see
+> [Example dataset](#example-dataset)).
 
 ## Where it fits
 
@@ -34,9 +38,14 @@ raw captures  →  AOI subset (this tool)  →  photogrammetry  →  ML tiling
 2. **filter**: keep the captures that fall inside one or more AOI polygons (KML/KMZ, with
    holes and an optional buffer in metres).
 3. **copy**: copy (or hard-link) the band files of the selected captures into one new
-   folder next to the project (`<project>_subset_01`, `_02`, …), each file named after its
-   folder chain (`Part1/0000SET/000/IMG_0000_1.tif` → `Part1_0000SET_000_IMG_0000_1.tif`)
-   so your photogrammetry software gets a single folder of images, and write a report.
+   folder next to the project (`<project>_subset_01`, `_02`, …), with one sub-folder per
+   source folder named after its folder chain
+   (`Part1/0000SET/000/IMG_0000_1.tif` → `Part1_0000SET_000/IMG_0000_1.tif`), and write a
+   report. File names are not changed. `--mode hardlink` makes the subset without using extra
+   disk space (see [Hard links](#hard-links-subsets-without-extra-disk-space)).
+   `--layout flat` puts all files into one folder instead and **renames** them
+   (`Part1_0000SET_000_IMG_0000_1.tif`); make sure your software supports renamed files
+   before you use it.
 4. **footprint**: write the outline of all capture positions as a KML polygon (convex or
    concave, optionally buffered, optionally one polygon per flight folder), which helps when
    you draw the AOIs and can itself be used as an AOI.
@@ -89,8 +98,10 @@ tool.
 <!-- KEEP: this section is the only place where the README names the author's hardware and
      software. It is a deliberate transparency statement; do not remove or neutralise it. -->
 
-The author developed and tested this tool on his own field data, captured with a
-**MicaSense Altum-PT** multispectral camera and processed in **Pix4Dmapper**.
+The workflow grew out of the author's field work with a **MicaSense Altum-PT**
+multispectral camera and **Pix4Dmapper**. The tool itself was tested with the public Altum-PT
+example dataset (see [Example dataset](#example-dataset)), a layered copy of it, and synthetic
+data.
 
 The code itself is meant to be independent of any camera or software brand, and every
 precaution we could think of has been taken to keep it that way:
@@ -99,6 +110,7 @@ precaution we could think of has been taken to keep it that way:
 - positions are read from the standard EXIF GPS tags with ExifTool;
 - areas of interest are standard KML/KMZ polygons;
 - the output is plain folders and CSV files that any photogrammetry or GIS software can read;
+- file names are not changed by default (`--layout folders`);
 - the example-data helper (`examples/make_layered_dataset.py`) takes the same `--bands` and
   `--pattern`, so it works with any one-folder dataset of per-band files.
 
@@ -235,7 +247,7 @@ example `C:\Tools\exiftool` → *OK*. Open a new PowerShell window.
 
 ## Usage
 
-A typical run, from a flight folder tree to one folder of images per area:
+A typical run, from a flight folder tree to one subset folder per area:
 
 ```bash
 uav-aoi-subset index     D:\survey                        # D:\survey\survey_image_index_YYYYMMDD.csv
@@ -247,6 +259,25 @@ uav-aoi-subset copy      D:\survey D:\aoi\north_image_index_YYYYMMDD.csv    # D:
 
 (Use `uv run uav-aoi-subset …` inside the tool's folder if you did not install it as a command.)
 
+### Hard links: subsets without extra disk space
+
+```bash
+uav-aoi-subset copy D:\survey D:\aoi\north_image_index_YYYYMMDD.csv --mode hardlink
+```
+
+A hard link is a second name for the same file on the disk, so the subset folder looks and
+works like a normal copy but needs no extra space: the summary shows `Space needed: 0 bytes`.
+Keep in mind:
+
+- It only works on the same drive as the project. The tool checks this before it starts and
+  stops with a message instead of copying.
+- The linked files **share their contents** with the originals. Do not edit them in place
+  (for example with a program that rewrites the image files); that would change the original
+  too. Reading and processing them is fine.
+- Deleting the subset folder later does not delete the originals.
+- Without `--mode`, `copy` makes real copies (`--mode copy`), which need as much free space as
+  the selected files; the tool checks the free space first.
+
 All commands and options:
 
 ```
@@ -255,7 +286,7 @@ uav-aoi-subset index     ROOT [--bands 7] [--pattern ...] [--exclude DIR_GLOB ..
 uav-aoi-subset filter    INDEX_CSV --aoi AREA.kml|.kmz [--buffer METRES] [--out CSV]
                          [--skip-duplicates]
 uav-aoi-subset copy      ROOT SUBSET_CSV [--dest DIR] [--mode copy|hardlink|move]
-                         [--layout flat|folders] [--dry-run] [--include FILE_GLOB ...]
+                         [--layout folders|flat] [--dry-run] [--include FILE_GLOB ...]
                          [--extra-captures ...] [--skip-duplicates]
 uav-aoi-subset footprint INDEX_CSV [--out KML] [--hull convex|concave] [--ratio R]
                          [--buffer METRES] [--per-folder [DEPTH]] [--overwrite]
@@ -342,17 +373,50 @@ the AOI file as `<AOI name>_image_index_YYYYMMDD.csv`.
 
 ## Example dataset
 
-To try the tool without your own data, you can use the public dataset
+Before you run the tool on your own raw data, you can try it the way we tested it:
+
+1. download the public example dataset (below);
+2. optionally give it a field-like folder tree with the helper script, so that it looks like
+   data straight from the camera;
+3. use the ready-made AOI files in [`examples/`](examples/);
+4. run the commands below and compare your counts with ours.
+
+The dataset is
 [Altum-PT data of a blueberry field](https://eaglenxt.com/data-set/altum-pt-data-of-a-blueberry-field/)
 published by EagleNXT: 480 captures × 7 bands, about 19 GB as a ZIP archive and 25 GB
 extracted.
 
 The data is not included in or redistributed by this repository. Download it from the
-provider's page; its terms of use are set by the provider. A step-by-step worked example
-with ready-made AOI files will be added to [`examples/`](examples/).
+provider's page; its terms of use are set by the provider.
+
+![Processed mosaic extent of the example dataset shown in Google Earth](docs/images/blueberry_mosaic_extent.png)
 
 As published, the dataset is **one folder**: all 3,360 band files and a calibration CSV side
 by side, with no sub-folders. The tool works with it as it is.
+
+Example files in [`examples/`](examples/):
+
+| File | What it is | Captures inside |
+|---|---|---|
+| `blueberries.kml` | the outline of the field (the `footprint` of all capture positions) | 480 |
+| `area-of-interest.kml` | an AOI of about 1 ha inside the field | 74 |
+
+### The dataset as published
+
+Download and extract the ZIP, for example to `C:\data\blueberry` (the folder that holds the
+3,361 files). Then, from the tool's folder (replace `YYYYMMDD` with the date in the file
+names):
+
+```bash
+uav-aoi-subset index C:\data\blueberry
+uav-aoi-subset filter C:\data\blueberry\blueberry_image_index_YYYYMMDD.csv --aoi examples\area-of-interest.kml --out C:\data\aoi_flat.csv
+uav-aoi-subset copy C:\data\blueberry C:\data\aoi_flat.csv --mode hardlink
+```
+
+- `index`: 480 captures, all complete, all with a GPS position.
+- `filter`: 74 captures inside the AOI.
+- `copy`: a new folder `C:\data\blueberry_subset_01` with the 518 band files (74 × 7) under
+  their original names, `Space needed: 0 bytes`, and a report CSV next to it.
 
 ### Why field data is harder
 
@@ -366,19 +430,21 @@ Data straight from the field rarely looks like that:
   project tree, so the same capture can exist twice.
 
 The tool handles this: a capture is identified by its folder **and** image number, never by
-the file name alone; `copy` gives every file a unique name built from its folder chain; and
-captures found in more than one folder are listed as copies (`--skip-duplicates` keeps one).
+the file name alone; `copy` keeps one output folder per source folder, so equal file names
+never clash; and captures found in more than one folder are listed as copies
+(`--skip-duplicates` keeps one).
 
-### Optional: a layered copy of the example data
+### A layered copy of the example data
 
-The one-folder example data cannot show these cases. If you want to see them on your own
-computer, `examples/make_layered_dataset.py` makes a copy of a one-folder dataset with a
-field-like folder tree. **This is optional**: the tool does not need it, and the example data
-works without it. The script is not part of the installed command; run it from the tool's
-folder (the Git clone or the extracted ZIP) with `uv run python …`.
+To see these cases on the example data, `examples/make_layered_dataset.py` makes a copy of a
+one-folder dataset with a field-like folder tree. You can then process it as if it came
+straight from the camera. The tool itself does not need this step; it is how we tested the
+field cases, and the closest you can get to field data without using your own. The script is
+not part of the installed command; run it from the tool's folder (the Git clone or the
+extracted ZIP) with `uv run python …`.
 
 ```bash
-uv run python examples/make_layered_dataset.py build C:\data\blueberry C:\data\blueberry_layered
+uv run python examples/make_layered_dataset.py build C:\data\blueberry C:\data\blueberry_layered --add-duplicate --mode hardlink
 ```
 
 It sorts the captures by image number, splits them into four consecutive groups (`--parts`)
@@ -397,10 +463,10 @@ blueberry_layered/
 blueberry_layered_mapping.csv   original file → new path and group
 ```
 
-- **Disk space.** The default `--mode copy` needs as much free space as the data (about 25 GB
-  for the example; the script shows the amount and checks it before it starts).
-  `--mode hardlink` needs almost none, but only works on the same drive as the data, and the
-  new files *share their contents* with the originals: changing one changes the other.
+- **Disk space.** `--mode hardlink` needs almost no space, but only works on the same drive as
+  the data, and the new files *share their contents* with the originals: changing one changes
+  the other. Without it, the script makes real copies (`--mode copy`, about 25 GB for the
+  example; it shows the amount and checks it before it starts).
 - `--add-duplicate [GROUP]` writes one group (default: 2) a second time into `old_subset/`,
   like a forgotten earlier subset folder.
 - The input folder is never changed. The output folder must be new or empty and outside
@@ -408,27 +474,33 @@ blueberry_layered_mapping.csv   original file → new path and group
 - `--bands` and `--pattern` work as in the tool, so other one-folder datasets work too.
 - `uv run python examples/make_layered_dataset.py build --help` lists all options.
 
-A suggested walk-through (replace `YYYYMMDD` with the date in the file names). Draw the AOI
-`cross.kml` **across** the flight lines, so that it crosses all four strips:
+Then process the layered copy like field data and check the result against the one-folder
+run above:
 
 ```bash
-uav-aoi-subset index C:\data\blueberry
-uv run python examples/make_layered_dataset.py build C:\data\blueberry C:\data\blueberry_layered
 uav-aoi-subset index C:\data\blueberry_layered
 uav-aoi-subset footprint C:\data\blueberry_layered\blueberry_layered_image_index_YYYYMMDD.csv --per-folder 1
-uav-aoi-subset filter C:\data\blueberry\blueberry_image_index_YYYYMMDD.csv --aoi C:\aoi\cross.kml --out C:\aoi\cross_flat.csv
-uav-aoi-subset filter C:\data\blueberry_layered\blueberry_layered_image_index_YYYYMMDD.csv --aoi C:\aoi\cross.kml --out C:\aoi\cross_layered.csv
-uav-aoi-subset copy C:\data\blueberry_layered C:\aoi\cross_layered.csv
-uv run python examples/make_layered_dataset.py verify C:\data\blueberry_layered_mapping.csv C:\aoi\cross_flat.csv C:\aoi\cross_layered.csv
+uav-aoi-subset filter C:\data\blueberry_layered\blueberry_layered_image_index_YYYYMMDD.csv --aoi examples\area-of-interest.kml --out C:\data\aoi_layered.csv
+uav-aoi-subset copy C:\data\blueberry_layered C:\data\aoi_layered.csv --mode hardlink
+uv run python examples/make_layered_dataset.py verify C:\data\blueberry_layered_mapping.csv C:\data\aoi_flat.csv C:\data\aoi_layered.csv
 ```
 
-- The layered index finds the same 480 captures, although `IMG_0000` now exists four times.
-- `footprint --per-folder 1` draws one outline per set folder: four strips.
-- `copy` writes one folder in which no two files clash (`0000SET_000_IMG_0000_1.tif`,
-  `0001SET_000_IMG_0000_1.tif`, …).
-- `verify` translates both subsets back to the original files and prints `RESULT: SAME` when
-  they hold the same captures (exit code 0). It also lists captures found more than once, for
-  example from `old_subset/` when the layered copy was made with `--add-duplicate`.
+- `index`: 600 captures, although `IMG_0000` now exists five times (four set folders and
+  `old_subset`): the 480 captures plus the 120 copies in `old_subset`, which are listed as
+  extra copies.
+- `footprint --per-folder 1`: one outline per set folder, four parallel strips, and a fifth
+  for `old_subset` on top of the second strip.
+- `filter`: 113 captures, the same 74 as in the one-folder run plus 39 copies from
+  `old_subset` (listed). Add `--skip-duplicates` to keep only the 74.
+- `copy`: one sub-folder per source folder (`0001SET_000`, `0002SET_000`,
+  `old_subset_0001SET_000`) with the original file names, 791 band files, no extra space.
+- `verify` translates both subsets back to the original files and prints `RESULT: SAME`
+  (exit code 0): 74 captures in both, plus the list of copies.
+
+`area-of-interest.kml` touches two of the four strips. To see the same file name from
+different strips side by side in the output, draw your own AOI as a band **across** the
+flight lines, crossing all four strips, and run the same commands with it. With
+`--layout flat` the files are renamed instead (`0000SET_000_IMG_0000_1.tif`, …).
 
 ## Development
 

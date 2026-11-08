@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Blueberry field</name>
+    <Style id="footprint1">
+      <LineStyle>
+        <color>ff00ffff</color>
+        <width>3</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>4d00ffff</color>
+      </PolyStyle>
+    </Style>
+    <Placemark>
+      <name>Blueberry field</name>
+      <description>Captures: 478&lt;br&gt;Area: 5.89 ha&lt;br&gt;Hull: convex&lt;br&gt;Source: capture positions of the example dataset (calibration-panel shots left out)</description>
+      <styleUrl>#footprint1</styleUrl>
+      <Polygon>
+        <tessellate>1</tessellate>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>-122.419415804158,48.5050078901111,0 -122.419361003647,48.5050132717222,0 -122.419295225414,48.5050311106667,0 -122.41928611435,48.505066573,0 -122.419292451417,48.5073937486944,0 -122.419292972897,48.5075330906667,0 -122.419293220611,48.5075801502222,0 -122.42211579175,48.507216294,0 -122.422192959889,48.5071761742222,0 -122.422370825556,48.5060297907222,0 -122.422372988333,48.5059094643889,0 -122.422374718778,48.5058079131111,0 -122.422374694083,48.5057131596667,0 -122.422372664389,48.5050855108611,0 -122.422372325722,48.5050610765556,0 -122.422355453028,48.50503308225,0 -122.422326827361,48.5050297375,0 -122.420530811222,48.5050146159444,0 -122.419415804158,48.5050078901111,0</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+  </Document>
+</kml>
