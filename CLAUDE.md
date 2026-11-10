@@ -151,7 +151,7 @@ to file/folder pickers (tkinter) — this mirrors the MATLAB `uigetdir`/`uigetfi
 5. **footprint**.
 6. Picker fallback, progress bars, polished errors.
 7. **Blueberry validation.** (a) Automated pre-release run on the user's Linux server
-   (`ssh malikane`, everything under `~/uav-demo` only, no sudo): the public dataset and its
+   (everything under `~/uav-demo` only, no sudo): the public dataset and its
    layered copy, numbers in `docs/VALIDATION.md` *Pre-release run*. (b) The short manual
    checklist in `docs/VALIDATION.md` on the work computer (Windows, Google Earth Pro), about
    one hour. Every finding becomes an issue (bug report form), fixed on the Mac.
@@ -182,9 +182,12 @@ deleted; **server pre-release run passed**, numbers in VALIDATION.md *Pre-releas
 reports never replace each other; example files `examples/blueberries.kml`,
 `examples/area-of-interest.kml`; README *Example dataset* rewritten as "try it the way we
 tested it" and run as written on the server; 277 tests).
-Package version is already `0.1.0` (set 2026-11-08, no tag yet). Decided 2026-11-08: the repo
-stays private until the Monday checklist has passed; then the v0.1.0 tag (with the user's yes)
-and the user makes it public.
+**7 blueberry validation** and **8 README assets**, 2026-11-09/10: the manual checklist M1–M18
+passed on Windows (numbers in VALIDATION.md *Results*; the test AOIs of M4/M12 were generated
+by script); the six README images are in `docs/images/` and placed in *Example dataset*;
+277 tests (274 passed, 3 skipped on Windows), CI green on all 6 jobs.
+Package version `0.1.0`; the v0.1.0 tag only with the user's yes, then the user makes the
+repository public.
 
 Decisions made so far:
 - `core/discovery.py` holds the ONE sanitizer (`sanitize_token`, `flat_folder_name`,
@@ -350,30 +353,17 @@ Example data and the layered copy (decided 2026-10-28, updated 2026-11-08):
   SAME only if the sets match; copies listed but not a difference. Tests in
   `tests/test_make_layered_dataset.py`.
 
-Server (`ssh malikane`, everything in `~/uav-demo`): `tools/` (uv, ExifTool 13.61, uv cache and
+Server (the user's ssh alias, everything in `~/uav-demo`): `tools/` (uv, ExifTool 13.61, uv cache and
 Pythons), `env.sh`, `repo/` (clone of a `git bundle`; patched files are copied in with `scp`),
 `data/blueberry` (the dataset, keep it), test outputs in `data/`, `results/`, `aoi/`,
 `readme_run/` (may be deleted). Check scripts live in the session scratchpad only.
 
-Next: **Monday 2026-11-09, the manual checklist on the work computer** (Windows, Google Earth
-Pro), `docs/VALIDATION.md` M1–M18, about one hour, then the stage B assets, the tag and the
-public switch. **The agent there follows `docs/MONDAY_RUN.md`** (prompt, install state, steps,
-images, public gate, tag commands, release notes); the Mac session is not available. Summary:
-- Internal notes for that session (not in the public docs): `$Demo = "D:\uav-demo"`,
-  `$Data = "D:\altum-pt-blueberries-60m-sample-data\altum-pt-blueberries-60m-sample-data"`
-  (already downloaded and extracted). Hard links need `$Lay` and the M9 `--dest` on **D:**; for
-  a cross-drive test use C:. Repo-local git identity with the noreply email; delete the clone
-  and any stored GitHub credentials afterwards.
-- Order: M1–M10 (one-folder data, `examples/` KMLs), M11–M18 (layered copy; M12 also with
-  `examples/area-of-interest.kml`, expected flat 74 / layered 113 / SAME); note times, counts,
-  anything in the README that was unclear; findings → GitHub issues (bug report form).
-- Collect the RELEASE.md B1 images (`blueberry_mosaic_extent.png`, 01–05), numbers only in the
-  VALIDATION results table, push from the work computer.
-- Back on the Mac: fix findings, README images and final check, version 0.1.0 + `uv lock`, CI
-  green, tag only with the user's go-ahead (RELEASE.md B2).
-- Open `<!-- AUTHOR:` blocks for the user: *Why this tool exists*, optional *Positional
-  accuracy* note, *How this was built* (its suggested wording still mentions MATLAB
-  validation), *Author*.
+Next: **v0.1.0 released; feedback from users.** Small open points:
+- Optional `<!-- AUTHOR:` block under *Positional accuracy* (the user's own note; never fill it in).
+- Cosmetic: the cross-drive hard-link error gives its next step on the same line instead of an
+  indented second line (VALIDATION.md *Results* note).
+- CI annotations: GitHub forces `actions/checkout@v4` and `astral-sh/setup-uv@v6` from Node.js 20
+  to 24; update the action versions when newer majors are out.
 
 ## Data and privacy rules
 
@@ -390,10 +380,10 @@ images, public gate, tag commands, release notes); the Mac session is not availa
 ## Development and validation workflow (two machines)
 
 - **Development machine: the user's personal Mac** (this one). Code, unit tests and
-  synthetic data only. Repo lives at `~/Developer/resimleri_bloklara_ayirma/uav-aoi-subset`
-  (outside iCloud). MATLAB references are in the parent folder.
-- **Linux test server** (`ssh -o BatchMode=yes malikane '<command>'`, user `master`, key
-  only, via Tailscale). Code goes there as a `git bundle` (no GitHub credentials there);
+  synthetic data only. The repo lives in a folder outside iCloud; the MATLAB references are in
+  its parent folder.
+- **Linux test server** (`ssh -o BatchMode=yes <the user's ssh alias> '<command>'`, key only,
+  via Tailscale). Code goes there as a `git bundle` (no GitHub credentials there);
   uv, ExifTool, data and outputs all under `~/uav-demo` (env in `~/uav-demo/env.sh`); long
   jobs with `nohup … > ~/uav-demo/logs/<job>.log 2>&1 &`. No sudo, never touch SSH settings,
   `authorized_keys` or system files.

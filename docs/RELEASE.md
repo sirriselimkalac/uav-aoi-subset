@@ -3,7 +3,8 @@
 The release happens in two stages:
 
 Decided 2026-11-08: the repository goes public only **after** the Monday checklist has passed,
-together with v0.1.0; the Monday agent works from [MONDAY_RUN.md](MONDAY_RUN.md).
+together with v0.1.0. The checklist passed on 2026-11-09/10 (see [VALIDATION.md](VALIDATION.md),
+*Results*).
 
 - **A. Public gate**. The code is tested
   automatically on Windows, macOS and Linux, and was run on the public blueberry dataset and
@@ -16,8 +17,6 @@ together with v0.1.0; the Monday agent works from [MONDAY_RUN.md](MONDAY_RUN.md)
 
 Claude prepares and checks; the user switches the visibility on GitHub.
 
-- [ ] `docs/IS_BILGISAYARI.md` and `docs/MONDAY_RUN.md` (internal work-computer notes) are
-      deleted, and the Monday notes are gone from `CLAUDE.md`.
 - [ ] `git log -p --all` contains no private paths, user names, real campaign or project
       names, or coordinates other than the blueberry field and synthetic test values. Search
       for `C:\Users`, `/Users/`, drive paths and coordinate-like numbers.
@@ -73,7 +72,7 @@ Facts for the README, written into the VALIDATION.md results: the exact commands
 capture counts per AOI, files copied and size, timings of `index`, `copy` and the resume run,
 anything in the README that was unclear.
 
-### B2. Release (on the work computer, by the agent there; see MONDAY_RUN.md)
+### B2. Release
 
 1. `git pull`. Every check in VALIDATION.md is pass or n.a.; every issue is closed or fixed.
 2. Fix findings, if any. A fix that changes behaviour is re-checked before the tag.
