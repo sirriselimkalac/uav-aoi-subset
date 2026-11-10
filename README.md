@@ -401,6 +401,8 @@ Example files in [`examples/`](examples/):
 | `blueberries.kml` | the outline of the field (the `footprint` of all capture positions) | 480 |
 | `area-of-interest.kml` | an AOI of about 1 ha inside the field | 74 |
 
+![The field outline (yellow) and the example AOI (orange) in Google Earth](docs/images/01_google_earth_aoi.png)
+
 ### The dataset as published
 
 Download and extract the ZIP, for example to `C:\data\blueberry` (the folder that holds the
@@ -417,6 +419,10 @@ uav-aoi-subset copy C:\data\blueberry C:\data\aoi_flat.csv --mode hardlink
 - `filter`: 74 captures inside the AOI.
 - `copy`: a new folder `C:\data\blueberry_subset_01` with the 518 band files (74 × 7) under
   their original names, `Space needed: 0 bytes`, and a report CSV next to it.
+
+![index summary: 480 captures, all complete, all with GPS](docs/images/02_index.png)
+
+![copy --mode hardlink summary: 518 files linked, space needed 0 bytes, report CSV](docs/images/03_copy.png)
 
 ### Why field data is harder
 
@@ -489,13 +495,19 @@ uv run python examples/make_layered_dataset.py verify C:\data\blueberry_layered_
   `old_subset`): the 480 captures plus the 120 copies in `old_subset`, which are listed as
   extra copies.
 - `footprint --per-folder 1`: one outline per set folder, four parallel strips, and a fifth
-  for `old_subset` on top of the second strip.
+  for `old_subset` on top of the second strip. The last strip reaches out to one point near
+  the buildings: its last capture is the calibration-panel shot taken on the ground after the
+  flight.
 - `filter`: 113 captures, the same 74 as in the one-folder run plus 39 copies from
   `old_subset` (listed). Add `--skip-duplicates` to keep only the 74.
 - `copy`: one sub-folder per source folder (`0001SET_000`, `0002SET_000`,
   `old_subset_0001SET_000`) with the original file names, 791 band files, no extra space.
 - `verify` translates both subsets back to the original files and prints `RESULT: SAME`
   (exit code 0): 74 captures in both, plus the list of copies.
+
+![Per-folder footprint of the layered copy: one outline per set folder, with the example AOI](docs/images/04_layered_footprint.png)
+
+![verify: 74 captures in both subsets, the copies listed, RESULT: SAME](docs/images/05_verify.png)
 
 `area-of-interest.kml` touches two of the four strips. To see the same file name from
 different strips side by side in the output, draw your own AOI as a band **across** the
